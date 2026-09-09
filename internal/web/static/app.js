@@ -72,6 +72,34 @@
   }
   bindTabs(document);
 
+  // ---- manual refresh ----------------------------------------------
+  async function forceRefresh(key, spinner) {
+    if (spinner) spinner.classList.add("is-refreshing");
+    document.querySelectorAll(".reader-panel").forEach((p) => p.remove());
+    openReaders = 0;
+    try {
+      await fetch("/refresh", {
+        method: "POST",
+        body: key ? new URLSearchParams({ key }) : null,
+      });
+      await refresh(); // pull the fresh content into the page
+    } catch (_) {
+      /* ignore */
+    }
+    if (spinner) spinner.classList.remove("is-refreshing");
+  }
+
+  const refreshAllBtn = document.getElementById("refresh-all");
+  if (refreshAllBtn) {
+    refreshAllBtn.addEventListener("click", () => forceRefresh("", refreshAllBtn));
+  }
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".box__refresh");
+    if (!btn) return;
+    const panel = btn.closest(".box").querySelector(".panel.is-active");
+    forceRefresh(panel ? panel.dataset.key : "", btn);
+  });
+
   // ---- open external links in the OS default browser -----------------
   // Only when running as a standalone app-window — a normal browser tab should
   // keep native behaviour.

@@ -44,6 +44,19 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Manual refresh + cross-platform open (2026-09-08)
+
+- **Refresh buttons**: a ↻ in each card header (refetches the active tab's widget)
+  and one in the top bar (refetches everything). `POST /refresh` (optional `key`)
+  → `Scheduler.Refresh` fetches now, bypassing the TTL, blocking until done; the
+  frontend then does an in-place reload. Per-widget mutex so a manual refresh and
+  a scheduled tick can't run the same fetch concurrently.
+- **`openInBrowser`** (`internal/web/open.go`): `/open` now switches on GOOS —
+  `open` (macOS), `xdg-open` (Linux), `rundll32` (Windows). The binary builds for
+  `GOOS=darwin` clean; the packaging scripts are still Linux-only.
+
+---
+
 ## YouTube playlists (2026-09-08)
 
 `type: youtube` now takes `playlists: [PL…]` alongside `channels: [UC…]` — both

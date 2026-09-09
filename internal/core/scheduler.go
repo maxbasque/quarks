@@ -13,6 +13,7 @@ type job struct {
 	ttl      time.Duration
 	limit    int
 	provider Provider
+	mu       sync.Mutex // serializes a scheduled fetch with a manual refresh
 }
 
 // Scheduler runs one loop per widget, each on its own TTL, writing results into
@@ -20,7 +21,9 @@ type job struct {
 type Scheduler struct {
 	store *Store
 	log   *slog.Logger
-	jobs  []job
+	jobs  []*job
+
+	runCtx context.Context
 }
 
 func NewScheduler(store *Store, log *slog.Logger) *Scheduler {
@@ -30,17 +33,19 @@ func NewScheduler(store *Store, log *slog.Logger) *Scheduler {
 // Add registers a widget instance. key must be unique and stable across restarts
 // (it is the disk-cache filename).
 func (s *Scheduler) Add(key string, cfg WidgetConfig, p Provider) {
-	s.jobs = append(s.jobs, job{key: key, ttl: cfg.TTL, limit: cfg.Limit, provider: p})
+	s.jobs = append(s.jobs, &job{key: key, ttl: cfg.TTL, limit: cfg.Limit, provider: p})
 }
 
 // Run starts every widget loop and blocks until ctx is cancelled and every loop
 // has returned. That lets a caller (config reload) know the old scheduler is
 // fully stopped before starting a replacement.
 func (s *Scheduler) Run(ctx context.Context) {
+	s.runCtx = ctx
+
 	var wg sync.WaitGroup
 	for _, j := range s.jobs {
 		wg.Add(1)
-		go func(j job) {
+		go func(j *job) {
 			defer wg.Done()
 			s.loop(ctx, j)
 		}(j)
@@ -49,7 +54,35 @@ func (s *Scheduler) Run(ctx context.Context) {
 	wg.Wait()
 }
 
-func (s *Scheduler) loop(ctx context.Context, j job) {
+// Refresh fetches now, outside the schedule. An empty key refreshes every widget
+// (concurrently). It blocks until the fetch(es) finish and reports whether any
+// widget matched.
+func (s *Scheduler) Refresh(key string) bool {
+	ctx := s.runCtx
+	if ctx == nil {
+		return false
+	}
+
+	if key == "" {
+		var wg sync.WaitGroup
+		for _, j := range s.jobs {
+			wg.Add(1)
+			go func(j *job) { defer wg.Done(); s.fetch(ctx, j) }(j)
+		}
+		wg.Wait()
+		return len(s.jobs) > 0
+	}
+
+	for _, j := range s.jobs {
+		if j.key == key {
+			s.fetch(ctx, j)
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scheduler) loop(ctx context.Context, j *job) {
 	s.fetch(ctx, j) // once immediately
 
 	t := time.NewTicker(j.ttl)
@@ -64,7 +97,10 @@ func (s *Scheduler) loop(ctx context.Context, j job) {
 	}
 }
 
-func (s *Scheduler) fetch(ctx context.Context, j job) {
+func (s *Scheduler) fetch(ctx context.Context, j *job) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

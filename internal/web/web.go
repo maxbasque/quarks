@@ -7,7 +7,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,13 +39,14 @@ type Box struct {
 
 // Server renders the dashboard from whatever is currently in the store.
 type Server struct {
-	store  *core.Store
-	reader *reader.Reader
-	meta   atomic.Pointer[Meta]
-	tmpl   *template.Template
+	store   *core.Store
+	reader  *reader.Reader
+	refresh func(key string) bool // fetch now, bypassing the schedule
+	meta    atomic.Pointer[Meta]
+	tmpl    *template.Template
 }
 
-func NewServer(store *core.Store) (*Server, error) {
+func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"ago":   ago,
 		"temp":  temp,
@@ -56,7 +56,7 @@ func NewServer(store *core.Store) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, reader: reader.New(), tmpl: tmpl}
+	s := &Server{store: store, reader: reader.New(), refresh: refresh, tmpl: tmpl}
 	s.meta.Store(&Meta{Columns: 3, Theme: "dark"})
 	return s, nil
 }
@@ -72,14 +72,15 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.Handle("/static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("/manifest.webmanifest", s.handleManifest)
 	mux.HandleFunc("/open", s.handleOpen)
+	mux.HandleFunc("/refresh", s.handleRefresh)
 	mux.HandleFunc("/reader", s.handleReader)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
 }
 
-// handleOpen hands a URL to the OS default browser via xdg-open. The app-window
-// (Chromium in --app mode) would otherwise open links in a second Chromium
-// window; the frontend routes clicks here only when it is running standalone.
+// handleOpen hands a URL to the OS default browser. The app-window (Chromium in
+// --app mode) would otherwise open links in a second Chromium window; the
+// frontend routes clicks here only when it is running standalone.
 func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -91,8 +92,26 @@ func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad url", http.StatusBadRequest)
 		return
 	}
-	if err := exec.Command("xdg-open", u.String()).Start(); err != nil {
+	if err := openInBrowser(u.String()); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleRefresh fetches a widget (?key=…) or all widgets (no key) immediately.
+// It blocks until the fetch finishes, so the client can reload right after.
+func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.refresh == nil {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if !s.refresh(r.FormValue("key")) {
+		http.Error(w, "unknown widget", http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

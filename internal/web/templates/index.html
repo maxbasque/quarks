@@ -17,6 +17,7 @@
     <div class="wordmark">Quark<span>'s</span></div>
     <div class="topbar__right">
       <span class="tick" id="lastsync" hidden></span>
+      <button class="iconbtn" id="refresh-all" type="button" title="Refresh everything" aria-label="Refresh everything">↻</button>
       <button class="iconbtn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
     </div>
   </header>
@@ -42,6 +43,7 @@
             <span class="badge{{ if .Danger }} badge--danger{{ end }}"{{ if not .Badge }} hidden{{ end }}>{{ .Badge }}</span>
             <span class="fresh">{{ .Fresh }}</span>
             {{ end }}
+            <button class="box__refresh" type="button" title="Refresh" aria-label="Refresh">↻</button>
           </div>
         </header>
         <div class="box__panels">

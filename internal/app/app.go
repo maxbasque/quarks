@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/maxbasque/quarks/internal/config"
@@ -32,9 +33,9 @@ type App struct {
 	store    *core.Store
 	srv      *web.Server
 
-	// touched only by Run and the Watch goroutine, never concurrently
+	mu      sync.Mutex // guards current
 	current *runtime
-	lastMod time.Time
+	lastMod time.Time // touched only by Run and watch
 }
 
 // runtime is one generation of the scheduler — cancel it and wait on done to
@@ -42,14 +43,11 @@ type App struct {
 type runtime struct {
 	cancel context.CancelFunc
 	done   chan struct{}
+	sched  *core.Scheduler
 }
 
 func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	store, err := core.NewStore(cacheDir)
-	if err != nil {
-		return nil, err
-	}
-	srv, err := web.NewServer(store)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +59,26 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("reddit", reddit.New)
 	reg.Register("youtube", youtube.New)
 
-	return &App{cfgPath: cfgPath, log: log, registry: reg, store: store, srv: srv}, nil
+	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
+
+	srv, err := web.NewServer(store, a.Refresh)
+	if err != nil {
+		return nil, err
+	}
+	a.srv = srv
+	return a, nil
+}
+
+// Refresh fetches widget key (or all, if key is empty) immediately, bypassing
+// the schedule. Blocks until done. Returns whether any widget matched.
+func (a *App) Refresh(key string) bool {
+	a.mu.Lock()
+	rt := a.current
+	a.mu.Unlock()
+	if rt == nil {
+		return false
+	}
+	return rt.sched.Refresh(key)
 }
 
 // Run loads the config, starts the HTTP server and the config watcher, and
@@ -166,8 +183,10 @@ func (a *App) reload(ctx context.Context) error {
 		close(done)
 	}()
 
+	a.mu.Lock()
 	old := a.current
-	a.current = &runtime{cancel: cancel, done: done}
+	a.current = &runtime{cancel: cancel, done: done, sched: sched}
+	a.mu.Unlock()
 	if old != nil {
 		old.cancel()
 		select {
