@@ -44,7 +44,7 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
-## Restyle: soft dark + monospace (2026-09-09)
+## Restyle: soft dark + IBM Plex Sans (2026-09-09)
 
 Dark-only now — light palette and the theme toggle are gone (`window.theme` still
 parses, just unused). One soft, slightly warm dark palette (Tokyo-Night-ish);
