@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,11 +24,17 @@ var assets embed.FS
 // Meta is the config-derived context the renderer needs beyond what the Store
 // already carries. The app publishes a new one on every config reload.
 type Meta struct {
+	Theme string
+	TTLs  map[string]time.Duration // widget key -> ttl, for the stale badge
+	Pages []Page
+}
+
+// Page is one top-level tab: its column layout and cards.
+type Page struct {
+	Name          string
 	Columns       int
 	ColumnWeights []float64
-	Theme         string
-	TTLs          map[string]time.Duration // widget key -> ttl, for the stale badge
-	Boxes         []Box                    // dashboard layout, in config order
+	Boxes         []Box
 }
 
 // Box is one card. Members are widget keys; more than one means a tabbed card.
@@ -58,7 +65,7 @@ func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error
 		return nil, err
 	}
 	s := &Server{store: store, reader: reader.New(), refresh: refresh, tmpl: tmpl}
-	s.meta.Store(&Meta{Columns: 3, Theme: "dark"})
+	s.meta.Store(&Meta{Theme: "dark"})
 	return s, nil
 }
 
@@ -182,9 +189,16 @@ type boxVM struct {
 }
 
 type pageVM struct {
-	Theme    string
+	Name     string
+	Slug     string
 	GridCols template.CSS // value for grid-template-columns
 	Columns  [][]boxVM
+}
+
+type indexVM struct {
+	Theme     string
+	MultiPage bool
+	Pages     []pageVM
 }
 
 // gridColumns builds the grid-template-columns value from the column count and
@@ -217,68 +231,82 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		byKey[st.Key] = st
 	}
 
-	n := meta.Columns
-	if n < 1 {
-		n = 1
-	}
-	cols := make([][]boxVM, n)
-
-	boxes := append([]Box(nil), meta.Boxes...)
-	sort.SliceStable(boxes, func(i, j int) bool { return boxes[i].Order < boxes[j].Order })
-
-	for _, b := range boxes {
-		bv := boxVM{Title: b.Title}
-		for _, key := range b.Members {
-			st := byKey[key]
-			tv := tabVM{
-				Key:     key,
-				Title:   st.Title,
-				Weather: st.Weather,
-				Fresh:   freshLabel(st.LastOK),
-			}
-
-			items := make([]core.Item, len(st.Items))
-			copy(items, st.Items)
-			for i := range items {
-				if strings.EqualFold(items[i].Source, st.Title) {
-					items[i].Source = ""
-				}
-				if strings.EqualFold(items[i].Author, items[i].Source) {
-					items[i].Author = ""
-				}
-			}
-			tv.Items = items
-
-			switch ttl := meta.TTLs[key]; {
-			case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
-				tv.Badge, tv.Danger = "offline", true
-			case st.LastErr != "":
-				tv.Badge = "stale · " + compactSince(st.LastOK)
-			case ttl > 0 && st.Stale(ttl*2):
-				tv.Badge = "stale · " + compactSince(st.LastOK)
-			}
-			bv.Danger = bv.Danger || tv.Danger
-			bv.Tabs = append(bv.Tabs, tv)
+	vm := indexVM{Theme: meta.Theme, MultiPage: len(meta.Pages) > 1}
+	for pi, pg := range meta.Pages {
+		n := pg.Columns
+		if n < 1 {
+			n = 1
 		}
-		bv.Tabbed = len(bv.Tabs) > 1
+		cols := make([][]boxVM, n)
 
-		ci := b.Column - 1
-		if ci < 0 || ci >= n {
-			ci = 0
+		boxes := append([]Box(nil), pg.Boxes...)
+		sort.SliceStable(boxes, func(i, j int) bool { return boxes[i].Order < boxes[j].Order })
+
+		for _, b := range boxes {
+			bv := boxVM{Title: b.Title}
+			for _, key := range b.Members {
+				st := byKey[key]
+				tv := tabVM{Key: key, Title: st.Title, Weather: st.Weather, Fresh: freshLabel(st.LastOK)}
+
+				items := make([]core.Item, len(st.Items))
+				copy(items, st.Items)
+				for i := range items {
+					if strings.EqualFold(items[i].Source, st.Title) {
+						items[i].Source = ""
+					}
+					if strings.EqualFold(items[i].Author, items[i].Source) {
+						items[i].Author = ""
+					}
+				}
+				tv.Items = items
+
+				switch ttl := meta.TTLs[key]; {
+				case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
+					tv.Badge, tv.Danger = "offline", true
+				case st.LastErr != "":
+					tv.Badge = "stale · " + compactSince(st.LastOK)
+				case ttl > 0 && st.Stale(ttl*2):
+					tv.Badge = "stale · " + compactSince(st.LastOK)
+				}
+				bv.Danger = bv.Danger || tv.Danger
+				bv.Tabs = append(bv.Tabs, tv)
+			}
+			bv.Tabbed = len(bv.Tabs) > 1
+
+			ci := b.Column - 1
+			if ci < 0 || ci >= n {
+				ci = 0
+			}
+			cols[ci] = append(cols[ci], bv)
 		}
-		cols[ci] = append(cols[ci], bv)
+
+		name := pg.Name
+		if name == "" {
+			name = "Home"
+		}
+		vm.Pages = append(vm.Pages, pageVM{
+			Name:     name,
+			Slug:     pageSlug(name, pi),
+			GridCols: gridColumns(n, pg.ColumnWeights),
+			Columns:  cols,
+		})
 	}
 
-	page := pageVM{
-		Theme:    meta.Theme,
-		GridCols: gridColumns(n, meta.ColumnWeights),
-		Columns:  cols,
-	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	if err := s.tmpl.ExecuteTemplate(w, "index.html", page); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "index.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+func pageSlug(name string, i int) string {
+	s := strings.Trim(slugRe.ReplaceAllString(strings.ToLower(name), "-"), "-")
+	if s == "" {
+		return "p" + strconv.Itoa(i)
+	}
+	return s
 }
 
 func freshLabel(t time.Time) string {
@@ -292,15 +320,35 @@ func freshLabel(t time.Time) string {
 	}
 }
 
-// ago renders an item timestamp; client JS keeps it current after load.
+// ago renders an item timestamp, past or future ("3h ago" / "in 2d"); client JS
+// keeps it current after load.
 func ago(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	if time.Since(t) < time.Minute {
-		return "just now"
+	d := time.Since(t)
+	future := d < 0
+	if future {
+		d = -d
 	}
-	return compactSince(t) + " ago"
+	if future && d < time.Hour {
+		return "just now" // small future offset = clock skew, not a real schedule
+	}
+	var v string
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		v = strconv.Itoa(int(d.Minutes())) + "m"
+	case d < 24*time.Hour:
+		v = strconv.Itoa(int(d.Hours())) + "h"
+	default:
+		v = strconv.Itoa(int(d.Hours()/24)) + "d"
+	}
+	if future {
+		return "in " + v
+	}
+	return v + " ago"
 }
 
 // temp rounds a Celsius value to a whole-degree string like "15°".

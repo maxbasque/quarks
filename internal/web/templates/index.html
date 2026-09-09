@@ -15,6 +15,13 @@
 <body>
   <header class="topbar">
     <div class="wordmark">Quark<span>'s</span></div>
+    {{ if .MultiPage }}
+    <nav class="pagetabs" role="tablist">
+      {{ range $i, $p := .Pages }}
+      <button type="button" class="pagetab{{ if eq $i 0 }} is-active{{ end }}" data-page="{{ $p.Slug }}">{{ $p.Name }}</button>
+      {{ end }}
+    </nav>
+    {{ end }}
     <div class="topbar__right">
       <span class="tick" id="lastsync" hidden></span>
       <button class="iconbtn" id="refresh-all" type="button" title="Refresh everything" aria-label="Refresh everything">↻</button>
@@ -22,43 +29,46 @@
     </div>
   </header>
 
-  <main class="grid" style="--grid-cols: {{ .GridCols }}" data-refresh="60">
-    {{ range .Columns }}
-    <div class="col">
-      {{ range . }}
-      {{ $box := . }}
-      <section class="box{{ if .Tabbed }} box--tabbed{{ end }}{{ if .Danger }} box--danger{{ end }}"
-               data-box="{{ (index .Tabs 0).Key }}">
-        <header class="box__head">
-          {{ if .Tabbed }}
-          <div class="box__headtop">
-            {{ if .Title }}<span class="box__label">{{ .Title }}</span>{{ end }}
+  <div id="pages" data-refresh="60">
+    {{ range $i, $p := .Pages }}
+    <main class="grid page{{ if eq $i 0 }} is-active{{ end }}" data-page="{{ $p.Slug }}" style="--grid-cols: {{ $p.GridCols }}">
+      {{ range $p.Columns }}
+      <div class="col">
+        {{ range . }}
+        <section class="box{{ if .Tabbed }} box--tabbed{{ end }}{{ if .Danger }} box--danger{{ end }}"
+                 data-box="{{ (index .Tabs 0).Key }}">
+          <header class="box__head">
+            {{ if .Tabbed }}
+            <div class="box__headtop">
+              {{ if .Title }}<span class="box__label">{{ .Title }}</span>{{ end }}
+              {{ template "boxstatus" (index .Tabs 0) }}
+            </div>
+            <div class="box__tabs" role="tablist">
+              {{ range $i, $t := .Tabs }}
+              <button type="button" class="box__tab{{ if eq $i 0 }} is-active{{ end }}" role="tab"
+                      data-tab="{{ $i }}" data-fresh="{{ $t.Fresh }}" data-badge="{{ $t.Badge }}"
+                      {{ if $t.Danger }}data-danger="1"{{ end }}>{{ $t.Title }}</button>
+              {{ end }}
+            </div>
+            {{ else }}
+            <h2 class="box__title">{{ (index .Tabs 0).Title }}</h2>
             {{ template "boxstatus" (index .Tabs 0) }}
-          </div>
-          <div class="box__tabs" role="tablist">
+            {{ end }}
+          </header>
+          <div class="box__panels">
             {{ range $i, $t := .Tabs }}
-            <button type="button" class="box__tab{{ if eq $i 0 }} is-active{{ end }}" role="tab"
-                    data-tab="{{ $i }}" data-fresh="{{ $t.Fresh }}" data-badge="{{ $t.Badge }}"
-                    {{ if $t.Danger }}data-danger="1"{{ end }}>{{ $t.Title }}</button>
+            <div class="panel{{ if eq $i 0 }} is-active{{ end }}" data-panel="{{ $i }}" data-key="{{ $t.Key }}">
+              {{ template "tabbody" $t }}
+            </div>
             {{ end }}
           </div>
-          {{ else }}
-          <h2 class="box__title">{{ (index .Tabs 0).Title }}</h2>
-          {{ template "boxstatus" (index .Tabs 0) }}
-          {{ end }}
-        </header>
-        <div class="box__panels">
-          {{ range $i, $t := .Tabs }}
-          <div class="panel{{ if eq $i 0 }} is-active{{ end }}" data-panel="{{ $i }}" data-key="{{ $t.Key }}">
-            {{ template "tabbody" $t }}
-          </div>
-          {{ end }}
-        </div>
-      </section>
+        </section>
+        {{ end }}
+      </div>
       {{ end }}
-    </div>
+    </main>
     {{ end }}
-  </main>
+  </div>
 </body>
 </html>
 

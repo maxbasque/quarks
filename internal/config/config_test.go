@@ -13,13 +13,13 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	}
 }
 
-// feeds decodes the "feeds" list of the single widget in box bi.
+// feeds decodes the "feeds" list of the single widget in box bi of page 0.
 func feeds(t *testing.T, cfg *Config, bi int) []string {
 	t.Helper()
 	var s struct {
 		Feeds []string `yaml:"feeds"`
 	}
-	if err := cfg.Boxes[bi].Widgets[0].Decode(&s); err != nil {
+	if err := cfg.Pages[0].Boxes[bi].Widgets[0].Decode(&s); err != nil {
 		t.Fatal(err)
 	}
 	return s.Feeds
@@ -48,8 +48,8 @@ widgets:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Window.Columns != 2 {
-		t.Errorf("columns = %d", cfg.Window.Columns)
+	if cfg.Pages[0].Columns != 2 {
+		t.Errorf("columns = %d", cfg.Pages[0].Columns)
 	}
 
 	if got := feeds(t, cfg, 0); len(got) != 1 || got[0] != "https://reddit.example/.rss?feed=TOKEN" {
@@ -80,13 +80,14 @@ widgets:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.Boxes) != 2 {
-		t.Fatalf("want 2 boxes, got %d", len(cfg.Boxes))
+	boxes := cfg.Pages[0].Boxes
+	if len(boxes) != 2 {
+		t.Fatalf("want 2 boxes, got %d", len(boxes))
 	}
-	if len(cfg.Boxes[0].Widgets) != 1 {
+	if len(boxes[0].Widgets) != 1 {
 		t.Errorf("plain widget box should have 1 widget")
 	}
-	g := cfg.Boxes[1]
+	g := boxes[1]
 	if g.Title != "News" || len(g.Widgets) != 2 {
 		t.Fatalf("group box = %q with %d widgets", g.Title, len(g.Widgets))
 	}
@@ -138,7 +139,7 @@ widgets:
 	var s struct {
 		Source string `yaml:"source"`
 	}
-	_ = cfg.Boxes[0].Widgets[0].Decode(&s)
+	_ = cfg.Pages[0].Boxes[0].Widgets[0].Decode(&s)
 	if s.Source != "" {
 		t.Errorf("unresolved token should be empty, got %q", s.Source)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
 	"github.com/maxbasque/quarks/internal/providers/hackernews"
+	"github.com/maxbasque/quarks/internal/providers/nhl"
 	"github.com/maxbasque/quarks/internal/providers/reddit"
 	"github.com/maxbasque/quarks/internal/providers/rss"
 	"github.com/maxbasque/quarks/internal/providers/weather"
@@ -58,6 +59,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("weather", weather.New)
 	reg.Register("reddit", reddit.New)
 	reg.Register("youtube", youtube.New)
+	reg.Register("nhl", nhl.New)
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 
@@ -152,26 +154,35 @@ func (a *App) reload(ctx context.Context) error {
 	ttls := map[string]time.Duration{}
 	keep := map[string]bool{}
 	seen := map[string]bool{}
-	var boxes []web.Box
+	var pages []web.Page
 	order := 0
 
-	for bi, box := range cfg.Boxes {
-		var members []string
-		for _, wc := range box.Widgets {
-			key := widgetKey(wc, seen)
-			provider, err := a.registry.Build(wc)
-			if err != nil {
-				return fmt.Errorf("box %d (%s): %w", bi, wc.Type, err)
+	for _, pg := range cfg.Pages {
+		var boxes []web.Box
+		for bi, box := range pg.Boxes {
+			var members []string
+			for _, wc := range box.Widgets {
+				key := widgetKey(wc, seen)
+				provider, err := a.registry.Build(wc)
+				if err != nil {
+					return fmt.Errorf("page %q, box %d (%s): %w", pg.Name, bi, wc.Type, err)
+				}
+				a.store.Register(key, displayTitle(wc), order, wc.Column, wc.Type)
+				sched.Add(key, wc, provider)
+				ttls[key] = wc.TTL
+				keep[key] = true
+				members = append(members, key)
+				order++
 			}
-			a.store.Register(key, displayTitle(wc), order, wc.Column, wc.Type)
-			sched.Add(key, wc, provider)
-			ttls[key] = wc.TTL
-			keep[key] = true
-			members = append(members, key)
-			order++
+			boxes = append(boxes, web.Box{
+				Column: box.Column, Order: bi, Title: box.Title, Members: members,
+			})
 		}
-		boxes = append(boxes, web.Box{
-			Column: box.Column, Order: bi, Title: box.Title, Members: members,
+		pages = append(pages, web.Page{
+			Name:          pg.Name,
+			Columns:       pg.Columns,
+			ColumnWeights: pg.ColumnWeights,
+			Boxes:         boxes,
 		})
 	}
 	a.store.Retain(keep)
@@ -197,13 +208,11 @@ func (a *App) reload(ctx context.Context) error {
 	}
 
 	a.srv.Publish(web.Meta{
-		Columns:       cfg.Window.Columns,
-		ColumnWeights: cfg.Window.ColumnWeights,
-		Theme:         cfg.Window.Theme,
-		TTLs:          ttls,
-		Boxes:         boxes,
+		Theme: cfg.Window.Theme,
+		TTLs:  ttls,
+		Pages: pages,
 	})
-	a.log.Info("config loaded", "boxes", len(cfg.Boxes), "widgets", len(keep))
+	a.log.Info("config loaded", "pages", len(cfg.Pages), "widgets", len(keep))
 	return nil
 }
 

@@ -44,6 +44,25 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Top-level pages + NHL provider (2026-09-09)
+
+- **Pages**: `config.pages: [{name, columns, column_weights, widgets}]` gives the app
+  title-bar tabs, each its own column layout (Glance's pages concept). Legacy flat
+  `widgets:` still works (becomes one unnamed page). All widgets across all pages
+  fetch on schedule; the client shows one page at a time (localStorage `quarks-page`).
+  `config.Config.Pages`, `web.Meta.Pages`; the template wraps each page's grid in
+  `#pages` and in-place refresh swaps that whole container.
+- **`internal/providers/nhl`**: `type: nhl`, `team: MTL` — a team's season schedule
+  from `api-web.nhle.com` (keyless), one item per game, soonest first, old games
+  dropped after ~30h. Title "vs Senators" / "@ Maple Leafs" from the team's side,
+  opponent logo as thumbnail, venue (or score, once games are played) as summary,
+  gamecenter URL.
+- **Future-aware relative time**: `ago()` / JS `rel()` render "in 3h" / "in 10d" for
+  upcoming items (NHL games), with a <1h future window treated as "just now" to
+  absorb feed/clock skew.
+
+---
+
 ## Item summaries (2026-09-08)
 
 `rss` items now carry a `Summary` — the feed's `<description>`/`content` stripped
@@ -281,7 +300,8 @@ internal/providers/             (each: <name>.go + <name>_test.go)
   hackernews/  Algolia search API
   weather/     Open-Meteo
   reddit/      r/<subs>.json  (fragile — residential IP)
-  youtube/     channels → per-channel Atom, wraps rss
+  youtube/     channels/playlists → Atom, wraps rss
+  nhl/         a team's season schedule (api-web.nhle.com)
 internal/reader/reader.go       article extraction (go-readability + bluemonday)
 internal/web/
   web.go                        handlers (/, /reader, /open, /manifest), Meta

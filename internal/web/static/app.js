@@ -5,6 +5,8 @@
   "use strict";
 
   const root = document.documentElement;
+  let openReaders = 0;
+  let focused = -1;
 
   // ---- theme toggle -------------------------------------------------------
   const storedTheme = localStorage.getItem("quarks-theme");
@@ -21,11 +23,16 @@
 
   // ---- relative timestamps ---------------------------------------------
   const rel = (iso) => {
-    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    let s = (Date.now() - new Date(iso).getTime()) / 1000;
+    const future = s < 0;
+    s = Math.abs(s);
+    if (future && s < 3600) return "just now"; // small future offset = clock skew
+    let v;
     if (s < 60) return "just now";
-    if (s < 3600) return Math.floor(s / 60) + "m ago";
-    if (s < 86400) return Math.floor(s / 3600) + "h ago";
-    return Math.floor(s / 86400) + "d ago";
+    if (s < 3600) v = Math.floor(s / 60) + "m";
+    else if (s < 86400) v = Math.floor(s / 3600) + "h";
+    else v = Math.floor(s / 86400) + "d";
+    return future ? "in " + v : v + " ago";
   };
   const tickTimes = () => {
     document.querySelectorAll("time[datetime]").forEach((el) => {
@@ -71,6 +78,31 @@
     });
   }
   bindTabs(document);
+
+  // ---- page tabs (top-level) --------------------------------------
+  const PAGE_KEY = "quarks-page";
+
+  function activatePage(slug) {
+    const pages = [...document.querySelectorAll(".page")];
+    if (!pages.length) return;
+    if (!pages.some((p) => p.dataset.page === slug)) slug = pages[0].dataset.page;
+    pages.forEach((p) => p.classList.toggle("is-active", p.dataset.page === slug));
+    document.querySelectorAll(".pagetab").forEach((t) => {
+      t.classList.toggle("is-active", t.dataset.page === slug);
+    });
+    focused = -1;
+    try { localStorage.setItem(PAGE_KEY, slug); } catch (_) {}
+  }
+
+  function bindPages() {
+    let saved = null;
+    try { saved = localStorage.getItem(PAGE_KEY); } catch (_) {}
+    if (saved) activatePage(saved);
+    document.querySelectorAll(".pagetab").forEach((t) => {
+      t.addEventListener("click", () => activatePage(t.dataset.page));
+    });
+  }
+  bindPages();
 
   // ---- manual refresh ----------------------------------------------
   async function forceRefresh(key, spinner) {
@@ -122,8 +154,6 @@
   }
 
   // ---- inline reader --------------------------------------------------
-  let openReaders = 0;
-
   async function toggleReader(item) {
     if (!item) return;
     const readLink = item.querySelector(".item__read");
@@ -161,9 +191,8 @@
   });
 
   // ---- keyboard nav (visible items only) ----------------------------
-  let focused = -1;
   const realItems = () =>
-    [...document.querySelectorAll(".panel.is-active .item:not(.item--empty)")];
+    [...document.querySelectorAll(".page.is-active .panel.is-active .item:not(.item--empty)")];
 
   function setFocus(next) {
     const list = realItems();
@@ -199,10 +228,10 @@
     }
   });
 
-  // ---- in-place refresh (keeps scroll + active tab) -----------------
-  let grid = document.querySelector(".grid");
-  if (!grid) return;
-  const secs = parseInt(grid.dataset.refresh || "0", 10);
+  // ---- in-place refresh (keeps scroll + active page/tab) -----------
+  let pagesEl = document.getElementById("pages");
+  if (!pagesEl) return;
+  const secs = parseInt(pagesEl.dataset.refresh || "0", 10);
   const sync = document.getElementById("lastsync");
 
   const showSync = () => {
@@ -217,16 +246,19 @@
     refreshing = true;
     try {
       const scrolls = {};
-      grid.querySelectorAll(".panel[data-key]").forEach((p) => { scrolls[p.dataset.key] = p.scrollTop; });
+      pagesEl.querySelectorAll(".panel[data-key]").forEach((p) => { scrolls[p.dataset.key] = p.scrollTop; });
 
       const html = await (await fetch(location.pathname, { cache: "no-store" })).text();
-      const next = new DOMParser().parseFromString(html, "text/html").querySelector(".grid");
+      const next = new DOMParser().parseFromString(html, "text/html").getElementById("pages");
       if (next) {
-        grid.replaceWith(next);
-        grid = next;
+        pagesEl.replaceWith(next);
+        pagesEl = next;
         focused = -1;
-        bindTabs(grid);
-        grid.querySelectorAll(".panel[data-key]").forEach((p) => {
+        bindTabs(pagesEl);
+        let saved = null;
+        try { saved = localStorage.getItem(PAGE_KEY); } catch (_) {}
+        activatePage(saved);
+        pagesEl.querySelectorAll(".panel[data-key]").forEach((p) => {
           if (scrolls[p.dataset.key] != null) p.scrollTop = scrolls[p.dataset.key];
         });
         tickTimes();

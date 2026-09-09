@@ -1,75 +1,73 @@
 window:
-  columns: 3
   theme: dark              # dark | light  (in-app toggle overrides this per browser)
-  # column_weights: [1, 1.6, 1]   # optional — sizes columns relative to each other
 
-widgets:
-  # --- a plain widget: one feed, one card ---------------------------------
-  - type: hackernews
-    column: 1
-    title: Hacker News
-    ttl: 15m
-    limit: 25
-    # tags: front_page        # or ask_hn / show_hn / story
-    # query: rust
+# The dashboard can have several top-level pages — tabs in the title bar.
+# For a single page, drop `pages:` and put `widgets:` at the top level, with
+# optional `columns` / `column_weights` under `window:`.
+pages:
+  - name: Home
+    columns: 3
+    column_weights: [1, 1.6, 1]   # optional — relative column widths
 
-  # --- a tab group: several feeds sharing one card ------------------------
-  - type: group
-    column: 1
-    title: Radio-Canada       # optional label shown before the tabs
-    tabs:
-      - title: À la une
-        type: rss
+    widgets:
+      # a plain widget: one feed, one card
+      - type: hackernews
+        column: 1
+        title: Hacker News
         ttl: 15m
-        feeds: [https://ici.radio-canada.ca/info/rss/info/a-la-une]
-      - title: En continu
-        type: rss
-        ttl: 10m
-        feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu]
-
-  # YouTube: channel IDs and/or playlist IDs. No "my subscriptions" URL exists
-  # (that needs OAuth); export the list once from Google Takeout. Watch Later and
-  # Liked can't be fetched at all — use an unlisted playlist instead.
-  - type: group
-    column: 2
-    title: YouTube
-    tabs:
-      - title: Subs
-        type: youtube
-        ttl: 30m
         limit: 25
-        channels: [UCHnyfMqiRRG1u-2MsSQLbXA]   # start with UC…; interleaved
-      - title: Queue
-        type: youtube
+
+      # a tab group: several feeds sharing one card
+      - type: group
+        column: 1
+        title: Radio-Canada
+        tabs:
+          - { title: À la une, type: rss, ttl: 15m, feeds: [https://ici.radio-canada.ca/info/rss/info/a-la-une] }
+          - { title: En continu, type: rss, ttl: 10m, feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu] }
+          # RC section feeds: …/info/rss/<section>/en-continu
+          #   (politique, international, economie, sante, grandmontreal, sports, …)
+
+      # personalized Reddit home feed — a secret RSS URL from reddit.com/prefs/feeds/,
+      # kept in secrets.yaml (see secrets.example.yaml)
+      - type: rss
+        column: 2
+        title: Reddit
         ttl: 20m
-        playlists: [PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]   # start with PL…
+        feeds: [ "${secret:reddit_home}" ]
 
-  # Your personalized Reddit home feed — a secret RSS URL from
-  # reddit.com/prefs/feeds/, kept in secrets.yaml (see secrets.example.yaml).
-  - type: rss
-    column: 2
-    title: Reddit
-    ttl: 20m
-    feeds: [ "${secret:reddit_home}" ]
-  # Public subreddits instead (adds scores + comment counts, but the .json
-  # endpoint is blocked on some networks):
-  # - type: reddit
-  #   column: 2
-  #   title: r/selfhosted
-  #   subreddits: [selfhosted, bazzite]
-  #   sort: hot
+      - type: youtube
+        column: 2
+        title: YouTube
+        ttl: 30m
+        channels: [ UCHnyfMqiRRG1u-2MsSQLbXA ]   # channel IDs (UC…); playlists: [PL…] also works
 
-  - type: weather
-    column: 3
-    title: Montréal
-    ttl: 30m
-    latitude: 45.50
-    longitude: -73.57
-    forecast_days: 4
+      - type: weather
+        column: 3
+        title: Montréal
+        ttl: 30m
+        latitude: 45.50
+        longitude: -73.57
+        forecast_days: 4
 
-  - type: rss
-    column: 3
-    title: Lobsters
-    ttl: 20m
-    feeds: [https://lobste.rs/rss]
-    # summary: false        # rss items show a 2-line excerpt by default; opt out here
+      - type: rss
+        column: 3
+        title: Noovo Info
+        ttl: 20m
+        feeds: [https://www.noovo.info/arc/outboundfeeds/rss/]
+        # summary: false        # rss items show a 2-line excerpt by default
+
+  - name: Sports
+    columns: 2
+    widgets:
+      - type: nhl
+        column: 1
+        title: Canadiens
+        team: MTL              # 3-letter team code
+        ttl: 1h
+        limit: 12
+
+      - type: rss
+        column: 2
+        title: RC Sports
+        ttl: 20m
+        feeds: [https://ici.radio-canada.ca/info/rss/sports/en-continu]

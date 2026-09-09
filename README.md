@@ -34,16 +34,18 @@ Flags: `--config <path>` (default `~/.config/quarks/config.yaml`, or
 
 **Widget types:** `rss` (also covers YouTube channel feeds and the Reddit home
 feed via a secret URL), `hackernews`, `youtube` (channels + playlists), `reddit`,
-`weather`. `type: group` bundles several widgets into one card with tabs. Secrets
-live in `secrets.yaml` next to the config (`chmod 600`), referenced as
-`${secret:key}` — see `secrets.example.yaml` and `config.example.yaml`.
+`weather`, `nhl` (a team's schedule). `type: group` bundles several widgets into
+one card with tabs. Secrets live in `secrets.yaml` next to the config
+(`chmod 600`), referenced as `${secret:key}` — see `secrets.example.yaml` and
+`config.example.yaml`.
 
 **Keyboard:** `j` / `k` move between items, `Enter` opens the article inline
 (extracted reader view), `o` opens the original, `Esc` closes reader panels.
 `↻` buttons in each card and the top bar force a refresh.
 
 **Layout:** the dashboard fills the window — the page doesn't scroll, each card
-scrolls inside itself.
+scrolls inside itself. `pages:` in the config gives title-bar tabs, each with its
+own column layout.
 
 ## Install (user-scoped, no root)
 
