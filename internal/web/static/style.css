@@ -1,20 +1,20 @@
-/* JetBrains Mono (SIL OFL 1.1) — bundled, see fonts/OFL.txt */
+/* IBM Plex Sans (SIL OFL 1.1) — bundled latin subset, see fonts/OFL.txt */
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/static/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-family: "IBM Plex Sans";
+  src: url("/static/fonts/IBMPlexSans-400.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/static/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+  font-family: "IBM Plex Sans";
+  src: url("/static/fonts/IBMPlexSans-500.woff2") format("woff2");
   font-weight: 500;
   font-display: swap;
 }
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("/static/fonts/JetBrainsMono-Bold.woff2") format("woff2");
-  font-weight: 700;
+  font-family: "IBM Plex Sans";
+  src: url("/static/fonts/IBMPlexSans-600.woff2") format("woff2");
+  font-weight: 600;
   font-display: swap;
 }
 
@@ -38,7 +38,7 @@
   --warn:       #e0b57e;   /* soft amber */
   --danger:     #e498a4;   /* soft rose */
 
-  --font: "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --font: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius: 10px;
 }
 
@@ -58,8 +58,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: 400 13px/1.55 var(--font);
-  letter-spacing: -0.005em;
+  font: 400 13.5px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -85,7 +84,7 @@ a { color: inherit; }
 }
 
 .wordmark {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 14px;
   letter-spacing: 0;
   color: var(--text-hi);
@@ -203,9 +202,9 @@ a { color: inherit; }
 .box__label {
   margin: 0;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -228,7 +227,7 @@ a { color: inherit; }
   color: var(--muted);
   font: 500 11px var(--font);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.045em;
   padding: 7px 10px 8px;
   cursor: pointer;
   white-space: nowrap;
@@ -410,7 +409,7 @@ a { color: inherit; }
 .weather__icon { font-size: 32px; line-height: 1; }
 .weather__temp {
   font-size: 27px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-hi);
 }

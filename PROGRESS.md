@@ -48,7 +48,7 @@ What works, verified on the Bazzite box 2026-09-08:
 
 Dark-only now — light palette and the theme toggle are gone (`window.theme` still
 parses, just unused). One soft, slightly warm dark palette (Tokyo-Night-ish);
-**JetBrains Mono** bundled (`static/fonts/*.woff2`, SIL OFL, embedded via
+IBM Plex Sans bundled (`static/fonts/*.woff2`, SIL OFL, embedded via
 `//go:embed static`) and used throughout. Thinner scrollbars, quieter borders,
 softer accent/link/warn/danger tokens, item row hover.
 
