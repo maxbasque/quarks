@@ -100,12 +100,33 @@ func toItem(e *gofeed.Item, source string) core.Item {
 	if e.Image != nil {
 		it.Thumbnail = e.Image.URL
 	}
-	if mt, ok := e.Extensions["media"]["thumbnail"]; ok && len(mt) > 0 {
-		if u := mt[0].Attrs["url"]; u != "" {
-			it.Thumbnail = u
-		}
+	if u := mediaThumbnail(e); u != "" {
+		it.Thumbnail = u
 	}
 	return it
+}
+
+// mediaThumbnail digs a thumbnail URL out of the Media RSS extension, covering
+// both a bare <media:thumbnail> and the <media:group><media:thumbnail> nesting
+// that YouTube's per-channel feeds use.
+func mediaThumbnail(e *gofeed.Item) string {
+	media := e.Extensions["media"]
+	if media == nil {
+		return ""
+	}
+	if t := media["thumbnail"]; len(t) > 0 {
+		if u := t[0].Attrs["url"]; u != "" {
+			return u
+		}
+	}
+	if g := media["group"]; len(g) > 0 {
+		if t := g[0].Children["thumbnail"]; len(t) > 0 {
+			if u := t[0].Attrs["url"]; u != "" {
+				return u
+			}
+		}
+	}
+	return ""
 }
 
 func firstNonEmpty(vals ...string) string {

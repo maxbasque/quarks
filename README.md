@@ -28,7 +28,19 @@ cp config.example.yaml ~/.config/quarks/config.yaml
 ```
 
 Flags: `--config <path>` (default `~/.config/quarks/config.yaml`), `--addr <host:port>`
-(default `127.0.0.1:7373`).
+(default `127.0.0.1:7373`). The config file is hot-reloaded on save.
+
+## Development
+
+```bash
+make test          # offline — providers run against recorded fixtures
+make fakefeed      # terminal 1: fake YouTube / news / Reddit feeds on :7400
+make dev           # terminal 2: quarks against config.fake.yaml
+```
+
+`make install` sets it up for the current user: binary in `~/.local/bin`, a systemd
+`--user` service for the server, and a `.desktop` entry for the Chrome app-window.
+Everything is user-scoped — no root, nothing layered onto the base image.
 
 ## Layout
 

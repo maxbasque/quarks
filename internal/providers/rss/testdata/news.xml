@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Test News</title>
+    <link>https://news.example/</link>
+    <description>Fixture news feed.</description>
+    <lastBuildDate>Mon, 08 Sep 2026 12:00:00 +0000</lastBuildDate>
+    <item>
+      <title>Council approves budget</title>
+      <link>https://news.example/council-budget</link>
+      <guid isPermaLink="false">news-0001</guid>
+      <dc:creator>Priya Nair</dc:creator>
+      <pubDate>Mon, 08 Sep 2026 10:15:00 +0000</pubDate>
+      <description>The council voted 7-2 in favour.</description>
+    </item>
+    <item>
+      <title>Storm warning issued &amp; extended</title>
+      <link>https://news.example/storm-warning</link>
+      <guid isPermaLink="false">news-0002</guid>
+      <pubDate>Sun, 07 Sep 2026 22:40:00 +0000</pubDate>
+      <description>A warning is in effect until Tuesday.</description>
+    </item>
+    <item>
+      <title>Item with no date and no author</title>
+      <link>https://news.example/no-date</link>
+      <guid isPermaLink="false">news-0003</guid>
+      <description>This one is missing pubDate.</description>
+    </item>
+  </channel>
+</rss>

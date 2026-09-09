@@ -1,13 +1,21 @@
 BINARY := quarks
 PKG    := ./cmd/quarks
 
-.PHONY: build run test vet tidy install clean
+.PHONY: build run fakefeed dev test vet tidy install clean
 
 build:
 	go build -o $(BINARY) $(PKG)
 
 run: build
 	./$(BINARY)
+
+# Local fake-feed server for UI work (YouTube / news / Reddit shaped feeds).
+fakefeed:
+	go run ./cmd/fakefeed
+
+# Run against the fake feeds — start `make fakefeed` in another terminal first.
+dev: build
+	./$(BINARY) --config config.fake.yaml
 
 test:
 	go test ./...

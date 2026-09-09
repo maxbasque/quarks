@@ -1,0 +1,28 @@
+# UI-development config: points every widget at the local fakefeed server.
+#   Terminal 1:  go run ./cmd/fakefeed
+#   Terminal 2:  go run ./cmd/quarks --config config.fake.yaml
+window:
+  columns: 3
+  theme: dark
+
+widgets:
+  - type: rss
+    column: 1
+    title: Fake News
+    ttl: 5m
+    limit: 15
+    feeds: [ http://127.0.0.1:7400/news.xml ]
+
+  - type: rss
+    column: 2
+    title: Fake YouTube
+    ttl: 5m
+    limit: 12
+    feeds: [ http://127.0.0.1:7400/youtube.xml ]
+
+  - type: rss
+    column: 3
+    title: Fake Reddit
+    ttl: 5m
+    limit: 10
+    feeds: [ http://127.0.0.1:7400/reddit.xml ]

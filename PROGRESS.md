@@ -44,6 +44,24 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Test harness — done (2026-09-08)
+
+- **`cmd/fakefeed`** — dev-only server (`make fakefeed`, `127.0.0.1:7400`) serving
+  `/youtube.xml` (Atom + `media:group/media:thumbnail`, like a real YouTube channel
+  feed), `/news.xml` (RSS 2.0 + `dc:creator`), `/reddit.xml` (Atom), plus `/img/<seed>`
+  SVG placeholders so thumbnails render fully offline. Timestamps are regenerated on
+  every request (newest ~4m old, spreading ~40m/item), so relative-time rendering
+  gets exercised. `config.fake.yaml` + `make dev` wire quarks to it.
+- **`internal/providers/rss/rss_test.go`** — first real tests, against `testdata/*.xml`
+  fixtures served via `httptest` (no live network — `go test ./...` passes offline).
+  Covers: YouTube nested-`media:group` thumbnail extraction, bare `media:thumbnail`,
+  `dc:creator` → Author, missing pubDate → zero time, entity decoding, newest-first
+  ordering, all-feeds-fail error, no-feeds config error.
+- Fixed `rss` provider thumbnail extraction to handle the `media:group` nesting
+  (YouTube) as well as a bare `media:thumbnail`.
+
+---
+
 ## M1 — done (2026-09-08)
 
 - **Hot-reload:** wiring moved to `internal/app`. A 2s mtime poll on the config file
@@ -79,7 +97,11 @@ internal/core/
   registry.go                   type name → Factory
   scheduler.go                  per-widget fetch loops, WaitGroup drain
   store.go                      in-memory + on-disk snapshot, reload-safe
-internal/providers/rss/rss.go   generic feed provider (gofeed)
+internal/providers/rss/
+  rss.go                        generic feed provider (gofeed)
+  rss_test.go + testdata/       offline fixture tests
+cmd/fakefeed/main.go            dev-only fake feed server
+config.fake.yaml                UI-dev config pointing at fakefeed
 internal/web/
   web.go                        handlers, view models, Meta (published on reload)
   templates/index.html          html/template dashboard

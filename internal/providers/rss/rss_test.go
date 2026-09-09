@@ -1,0 +1,122 @@
+package rss_test
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/providers/rss"
+)
+
+// widgetConfig builds a core.WidgetConfig the same way config loading does: parse
+// a YAML mapping node through core.ParseWidget.
+func widgetConfig(t *testing.T, src string) core.WidgetConfig {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("yaml: %v", err)
+	}
+	wc, err := core.ParseWidget(*doc.Content[0])
+	if err != nil {
+		t.Fatalf("ParseWidget: %v", err)
+	}
+	return wc
+}
+
+func fetch(t *testing.T, cfgSrc string) []core.Item {
+	t.Helper()
+	p, err := rss.New(widgetConfig(t, cfgSrc))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	items, err := p.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	return items
+}
+
+func TestYouTubeFeed(t *testing.T) {
+	srv := httptest.NewServer(http.FileServer(http.Dir("testdata")))
+	defer srv.Close()
+
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: YT\nfeeds: [%s/youtube.xml]\n", srv.URL))
+
+	if len(items) != 2 {
+		t.Fatalf("want 2 items, got %d", len(items))
+	}
+
+	first := items[0]
+	if first.Title != "First video: nested media:group thumbnail" {
+		t.Errorf("title = %q", first.Title)
+	}
+	if first.Source != "YT" {
+		t.Errorf("source = %q, want the widget title", first.Source)
+	}
+	// thumbnail lives in <media:group><media:thumbnail> — the YouTube nesting
+	if first.Thumbnail != "https://i.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg" {
+		t.Errorf("thumbnail = %q", first.Thumbnail)
+	}
+	if first.PublishedAt.IsZero() {
+		t.Error("first item has zero PublishedAt")
+	}
+	// newest first
+	if items[1].PublishedAt.After(first.PublishedAt) {
+		t.Error("items not sorted newest-first")
+	}
+	if items[1].Thumbnail == "" {
+		t.Error("second item lost its bare media:thumbnail")
+	}
+}
+
+func TestNewsFeed(t *testing.T) {
+	srv := httptest.NewServer(http.FileServer(http.Dir("testdata")))
+	defer srv.Close()
+
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: News\nfeeds: [%s/news.xml]\n", srv.URL))
+
+	if len(items) != 3 {
+		t.Fatalf("want 3 items, got %d", len(items))
+	}
+
+	byTitle := map[string]core.Item{}
+	for _, it := range items {
+		byTitle[it.Title] = it
+	}
+
+	if got := byTitle["Council approves budget"].Author; got != "Priya Nair" {
+		t.Errorf("dc:creator not mapped to Author: %q", got)
+	}
+	if got := byTitle["Storm warning issued & extended"]; got.Title == "" {
+		t.Error("ampersand entity not decoded in title")
+	}
+	if got := byTitle["Item with no date and no author"]; !got.PublishedAt.IsZero() {
+		t.Errorf("missing pubDate should leave PublishedAt zero, got %v", got.PublishedAt)
+	}
+	for _, it := range items {
+		if it.ID == "" || it.URL == "" {
+			t.Errorf("item %q missing ID or URL", it.Title)
+		}
+	}
+}
+
+func TestErrorWhenAllFeedsFail(t *testing.T) {
+	p, err := rss.New(widgetConfig(t, "type: rss\ntitle: Dead\nfeeds: [http://127.0.0.1:1/nope.xml]\n"))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := p.Fetch(context.Background()); err == nil {
+		t.Error("expected an error when every feed is unreachable")
+	}
+}
+
+func TestNoFeedsConfigured(t *testing.T) {
+	if _, err := rss.New(widgetConfig(t, "type: rss\ntitle: Empty\n")); err == nil {
+		t.Error("expected an error when no feeds are configured")
+	}
+}
