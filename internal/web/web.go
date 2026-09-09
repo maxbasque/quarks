@@ -23,10 +23,11 @@ var assets embed.FS
 // Meta is the config-derived context the renderer needs beyond what the Store
 // already carries. The app publishes a new one on every config reload.
 type Meta struct {
-	Columns int
-	Theme   string
-	TTLs    map[string]time.Duration // widget key -> ttl, for the stale badge
-	Boxes   []Box                    // dashboard layout, in config order
+	Columns       int
+	ColumnWeights []float64
+	Theme         string
+	TTLs          map[string]time.Duration // widget key -> ttl, for the stale badge
+	Boxes         []Box                    // dashboard layout, in config order
 }
 
 // Box is one card. Members are widget keys; more than one means a tabbed card.
@@ -181,8 +182,26 @@ type boxVM struct {
 }
 
 type pageVM struct {
-	Theme   string
-	Columns [][]boxVM
+	Theme    string
+	GridCols template.CSS // value for grid-template-columns
+	Columns  [][]boxVM
+}
+
+// gridColumns builds the grid-template-columns value from the column count and
+// optional per-column weights. The output is derived only from an int and parsed
+// floats, so it is safe as trusted CSS.
+func gridColumns(n int, weights []float64) template.CSS {
+	if len(weights) == n {
+		parts := make([]string, n)
+		for i, w := range weights {
+			if w <= 0 {
+				w = 1
+			}
+			parts[i] = strconv.FormatFloat(w, 'g', -1, 64) + "fr"
+		}
+		return template.CSS(strings.Join(parts, " "))
+	}
+	return template.CSS("repeat(" + strconv.Itoa(n) + ", 1fr)")
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +269,11 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		cols[ci] = append(cols[ci], bv)
 	}
 
-	page := pageVM{Theme: meta.Theme, Columns: cols}
+	page := pageVM{
+		Theme:    meta.Theme,
+		GridCols: gridColumns(n, meta.ColumnWeights),
+		Columns:  cols,
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "index.html", page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

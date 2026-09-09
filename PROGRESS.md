@@ -44,6 +44,20 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Column weights (2026-09-08)
+
+`window.column_weights: [1, 1.6, 1]` sizes columns relative to each other (via a
+`--grid-cols` custom property; media-query collapse still wins at narrow widths).
+Ignored unless the list length matches `columns`.
+
+Note: YouTube's RSS endpoint is persistently IP-blocking the target network (every
+channel 404s). Swapped the box's video widget for Radio-Canada's `rad/reportages`
+feed. Real RC section feeds: `ici.radio-canada.ca/info/rss/info/{a-la-une,en-continu,
+en-bref,rad/reportages}` and `…/<section>/en-continu` (politique, international,
+economie, sante, grandmontreal, …).
+
+---
+
 ## Manual refresh + cross-platform open (2026-09-08)
 
 - **Refresh buttons**: a ↻ in each card header (refetches the active tab's widget)

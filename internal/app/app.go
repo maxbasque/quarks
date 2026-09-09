@@ -197,10 +197,11 @@ func (a *App) reload(ctx context.Context) error {
 	}
 
 	a.srv.Publish(web.Meta{
-		Columns: cfg.Window.Columns,
-		Theme:   cfg.Window.Theme,
-		TTLs:    ttls,
-		Boxes:   boxes,
+		Columns:       cfg.Window.Columns,
+		ColumnWeights: cfg.Window.ColumnWeights,
+		Theme:         cfg.Window.Theme,
+		TTLs:          ttls,
+		Boxes:         boxes,
 	})
 	a.log.Info("config loaded", "boxes", len(cfg.Boxes), "widgets", len(keep))
 	return nil

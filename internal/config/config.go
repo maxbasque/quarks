@@ -12,6 +12,10 @@ import (
 type Window struct {
 	Columns int    `yaml:"columns"`
 	Theme   string `yaml:"theme"`
+	// ColumnWeights sizes the columns relative to each other, e.g. [1, 1.5, 1]
+	// makes the middle column half again as wide. Ignored unless its length
+	// equals Columns.
+	ColumnWeights []float64 `yaml:"column_weights"`
 }
 
 // Box is one card on the dashboard. It holds one widget, or several shown as

@@ -1,6 +1,7 @@
 window:
   columns: 3
-  theme: dark        # dark | light  (the in-app toggle overrides this per browser)
+  theme: dark              # dark | light  (in-app toggle overrides this per browser)
+  # column_weights: [1, 1.6, 1]   # optional — sizes columns relative to each other
 
 widgets:
   # --- a plain widget: one feed, one card ---------------------------------

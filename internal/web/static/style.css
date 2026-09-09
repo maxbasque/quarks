@@ -79,7 +79,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(var(--cols, 3), 1fr);
+  grid-template-columns: var(--grid-cols, repeat(3, 1fr));
   gap: 14px;
   padding: 14px;
 }

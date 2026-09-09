@@ -22,7 +22,7 @@
     </div>
   </header>
 
-  <main class="grid" style="--cols: {{ len .Columns }}" data-refresh="60">
+  <main class="grid" style="--grid-cols: {{ .GridCols }}" data-refresh="60">
     {{ range .Columns }}
     <div class="col">
       {{ range . }}
