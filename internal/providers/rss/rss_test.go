@@ -115,6 +115,56 @@ func TestErrorWhenAllFeedsFail(t *testing.T) {
 	}
 }
 
+func TestSummaries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>C</title>
+		  <item><title>Trump tariffs</title><link>https://news.example/1</link><guid>1</guid>
+		    <pubDate>Wed, 09 Sep 2026 02:00:00 -0400</pubDate>
+		    <description>&lt;p&gt;Le président a signé cinq proclamations.&lt;/p&gt;</description></item>
+		  <item><title>VGC story</title><link>https://vgc.example/2</link><guid>2</guid>
+		    <pubDate>Wed, 09 Sep 2026 01:00:00 -0400</pubDate>
+		    <description>&lt;img src="https://vgc.example/lead.jpg"&gt; The tour visits Japan and the UK</description></item>
+		  <item><title>Reddit link</title><link>https://www.reddit.com/r/x/comments/3/t/</link><guid>3</guid>
+		    <pubDate>Wed, 09 Sep 2026 00:00:00 -0400</pubDate>
+		    <description>submitted by /u/bob to r/x [link] [comments]</description></item>
+		</channel></rss>`)
+	}))
+	defer srv.Close()
+
+	byTitle := map[string]core.Item{}
+	for _, it := range fetch(t, fmt.Sprintf("type: rss\ntitle: C\nfeeds: [%s]\n", srv.URL)) {
+		byTitle[it.Title] = it
+	}
+
+	if s := byTitle["Trump tariffs"].Summary; s != "Le président a signé cinq proclamations." {
+		t.Errorf("plain summary = %q", s)
+	}
+	vgc := byTitle["VGC story"]
+	if vgc.Summary != "The tour visits Japan and the UK" {
+		t.Errorf("VGC summary = %q", vgc.Summary)
+	}
+	if vgc.Thumbnail != "https://vgc.example/lead.jpg" {
+		t.Errorf("VGC image from <img> = %q", vgc.Thumbnail)
+	}
+	if s := byTitle["Reddit link"].Summary; s != "" {
+		t.Errorf("Reddit boilerplate should be dropped, got %q", s)
+	}
+}
+
+func TestSummaryCanBeDisabled(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>C</title>
+		  <item><title>X</title><link>https://x/1</link><guid>1</guid>
+		    <description>a real description</description></item>
+		</channel></rss>`)
+	}))
+	defer srv.Close()
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: C\nsummary: false\nfeeds: [%s]\n", srv.URL))
+	if items[0].Summary != "" {
+		t.Errorf("summary:false should suppress it, got %q", items[0].Summary)
+	}
+}
+
 func TestMediaContentThumbnail(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<?xml version="1.0"?>

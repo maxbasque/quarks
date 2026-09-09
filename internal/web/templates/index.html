@@ -100,6 +100,7 @@
       {{ if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
       <div class="item__body">
         <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ .Title }}</a>
+        {{ if .Summary }}<p class="item__summary">{{ .Summary }}</p>{{ end }}
         <div class="item__meta">
           {{ if .Source }}<span class="item__source">{{ .Source }}</span>{{ end }}
           {{ if .Author }}<span>{{ .Author }}</span>{{ end }}

@@ -53,6 +53,6 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 
 	// Empty source → the rss provider falls back to each feed's own title (the
 	// channel/playlist name). interleave=true so a busy channel doesn't crowd the
-	// others out.
-	return rss.NewWithFeeds(feeds, "", true), nil
+	// others out. No summaries — YouTube descriptions are walls of links.
+	return rss.NewWithFeeds(feeds, "", true, false), nil
 }

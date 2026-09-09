@@ -6,6 +6,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"html"
 	"regexp"
 	"sort"
 	"strings"
@@ -23,12 +24,15 @@ type settings struct {
 	// then next from each) instead of merging into one date-sorted list. Keeps a
 	// busy feed from crowding out the others — the default for youtube.
 	Interleave bool `yaml:"interleave"`
+	// summary: show a short plain-text excerpt under each title (default true).
+	Summary *bool `yaml:"summary"`
 }
 
 type Provider struct {
 	feeds      []string
 	source     string
 	interleave bool
+	summaries  bool // show a plain-text excerpt under each title
 	parser     *gofeed.Parser
 }
 
@@ -52,14 +56,21 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	if source == "" {
 		source = cfg.Title
 	}
+	summaries := s.Summary == nil || *s.Summary
 
-	return &Provider{feeds: s.Feeds, source: source, interleave: s.Interleave, parser: newParser()}, nil
+	return &Provider{
+		feeds:      s.Feeds,
+		source:     source,
+		interleave: s.Interleave,
+		summaries:  summaries,
+		parser:     newParser(),
+	}, nil
 }
 
 // NewWithFeeds builds an rss provider directly, for other providers that are
 // really just RSS with a nicer config surface (e.g. youtube).
-func NewWithFeeds(feeds []string, source string, interleave bool) core.Provider {
-	return &Provider{feeds: feeds, source: source, interleave: interleave, parser: newParser()}
+func NewWithFeeds(feeds []string, source string, interleave, summaries bool) core.Provider {
+	return &Provider{feeds: feeds, source: source, interleave: interleave, summaries: summaries, parser: newParser()}
 }
 
 func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
@@ -80,7 +91,7 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		}
 		one := make([]core.Item, 0, len(feed.Items))
 		for _, e := range feed.Items {
-			one = append(one, toItem(e, source))
+			one = append(one, p.toItem(e, source))
 		}
 		sortByDate(one)
 		perFeed = append(perFeed, one)
@@ -128,13 +139,12 @@ func roundRobin(feeds [][]core.Item) []core.Item {
 	}
 }
 
-func toItem(e *gofeed.Item, source string) core.Item {
+func (p *Provider) toItem(e *gofeed.Item, source string) core.Item {
 	it := core.Item{
 		ID:     firstNonEmpty(e.GUID, e.Link),
 		Title:  strings.TrimSpace(e.Title),
 		URL:    e.Link,
 		Source: source,
-		Body:   "", // reader view fills this lazily
 	}
 	if e.PublishedParsed != nil {
 		it.PublishedAt = *e.PublishedParsed
@@ -153,6 +163,17 @@ func toItem(e *gofeed.Item, source string) core.Item {
 	if u := mediaThumbnail(e); u != "" {
 		it.Thumbnail = u
 	}
+	// Some feeds (VGC, other WordPress) put the lead image in the description
+	// HTML rather than a media tag.
+	if it.Thumbnail == "" {
+		if m := imgSrcRe.FindStringSubmatch(e.Description + e.Content); m != nil {
+			it.Thumbnail = m[1]
+		}
+	}
+	if p.summaries {
+		it.Summary = summarize(firstNonEmpty(e.Description, e.Content))
+	}
+
 	// A Reddit home-feed RSS mixes many subreddits; surface which one from the
 	// permalink (only reddit.com links match, so other feeds are untouched).
 	if m := redditPathRe.FindStringSubmatch(it.URL); m != nil {
@@ -161,7 +182,37 @@ func toItem(e *gofeed.Item, source string) core.Item {
 	return it
 }
 
-var redditPathRe = regexp.MustCompile(`(?:^|\.)reddit\.com/r/([A-Za-z0-9_]+)/`)
+var (
+	redditPathRe = regexp.MustCompile(`(?:^|\.)reddit\.com/r/([A-Za-z0-9_]+)/`)
+	imgSrcRe     = regexp.MustCompile(`<img[^>]+src=["']([^"']+)["']`)
+	tagRe        = regexp.MustCompile(`<[^>]*>`)
+	wsRe         = regexp.MustCompile(`\s+`)
+	redditBoiler = regexp.MustCompile(`(?i)submitted by\s+/u/\S+\s+to\s+r/\S+`)
+)
+
+// summarize turns feed description/content HTML into a short plain-text excerpt.
+func summarize(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	txt := html.UnescapeString(tagRe.ReplaceAllString(raw, " "))
+	txt = strings.TrimSpace(wsRe.ReplaceAllString(txt, " "))
+	txt = strings.TrimSuffix(strings.TrimSpace(strings.TrimSuffix(txt, "[link] [comments]")), "[link]")
+	txt = strings.TrimSpace(txt)
+	if redditBoiler.MatchString(txt) && len(txt) < 140 {
+		return "" // Reddit link-post boilerplate, no real summary
+	}
+	const max = 260
+	if len(txt) > max {
+		if i := strings.LastIndex(txt[:max], " "); i > 0 {
+			txt = txt[:i]
+		} else {
+			txt = txt[:max]
+		}
+		txt += "…"
+	}
+	return txt
+}
 
 // mediaThumbnail digs an image URL out of the Media RSS extension: a bare
 // <media:thumbnail> or <media:content> (many news feeds), or the

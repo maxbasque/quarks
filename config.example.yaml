@@ -72,3 +72,4 @@ widgets:
     title: Lobsters
     ttl: 20m
     feeds: [https://lobste.rs/rss]
+    # summary: false        # rss items show a 2-line excerpt by default; opt out here

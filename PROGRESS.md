@@ -44,6 +44,18 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Item summaries (2026-09-08)
+
+`rss` items now carry a `Summary` — the feed's `<description>`/`content` stripped
+to plain text, whitespace-collapsed, capped ~260 chars, shown 2-line-clamped under
+the title. `<img>` in the description is harvested as a thumbnail when the item
+has none (helps VGC and other WordPress feeds). Reddit link-post boilerplate
+("submitted by /u/… to r/… [link] [comments]") is filtered out. Per-widget
+`summary: false` opt-out; `youtube` disables it (descriptions are link walls).
+`core.Item.Summary` is separate from `Body` (the lazy reader-view field).
+
+---
+
 ## Tabbed-card header two rows (2026-09-08)
 
 A tab group's header now stacks: label + status on top, the tab strip on its own

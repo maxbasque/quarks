@@ -16,5 +16,6 @@ type Item struct {
 	Score       int       // upvotes / HN points; 0 if N/A
 	Comments    int       //
 	CommentsURL string    // discussion link, distinct from URL
-	Body        string    // populated lazily by the reader view, not on poll
+	Summary     string    // short plain-text excerpt shown under the title
+	Body        string    // full text, populated lazily by the reader view
 }
