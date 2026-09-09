@@ -58,7 +58,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: 400 13.5px/1.5 var(--font);
+  font: 400 15px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -85,7 +85,7 @@ a { color: inherit; }
 
 .wordmark {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15.5px;
   letter-spacing: 0;
   color: var(--text-hi);
 }
@@ -97,7 +97,7 @@ a { color: inherit; }
   border: 0;
   background: transparent;
   color: var(--muted);
-  font: 500 12px var(--font);
+  font: 500 13.5px var(--font);
   padding: 5px 11px;
   border-radius: 7px;
   cursor: pointer;
@@ -107,7 +107,7 @@ a { color: inherit; }
 
 .topbar__right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 
-.tick { font-size: 11px; color: var(--faint); }
+.tick { font-size: 12.5px; color: var(--faint); }
 
 .iconbtn {
   width: 28px;
@@ -117,7 +117,7 @@ a { color: inherit; }
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1;
 }
 .iconbtn:hover { color: var(--text); border-color: var(--border-lit); }
@@ -201,7 +201,7 @@ a { color: inherit; }
 .box__title,
 .box__label {
   margin: 0;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -225,7 +225,7 @@ a { color: inherit; }
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--muted);
-  font: 500 11px var(--font);
+  font: 500 12.5px var(--font);
   text-transform: uppercase;
   letter-spacing: 0.045em;
   padding: 7px 10px 8px;
@@ -248,7 +248,7 @@ a { color: inherit; }
   background: transparent;
   color: var(--faint);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1;
   padding: 2px;
   border-radius: 4px;
@@ -258,10 +258,10 @@ a { color: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .is-refreshing { animation: spin 0.7s linear infinite; }
 
-.fresh { font-size: 10.5px; color: var(--faint); }
+.fresh { font-size: 12px; color: var(--faint); }
 
 .badge {
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--warn);
   border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
@@ -289,7 +289,7 @@ a { color: inherit; }
 }
 .item:last-child { border-bottom: 0; }
 .item:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
-.item--empty { color: var(--faint); font-size: 12px; }
+.item--empty { color: var(--faint); font-size: 13.5px; }
 .item--empty:hover { background: none; }
 
 .item__thumb {
@@ -315,7 +315,7 @@ a { color: inherit; }
 
 .item__summary {
   margin: 4px 0 0;
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
   display: -webkit-box;
@@ -326,7 +326,7 @@ a { color: inherit; }
 
 .item__meta {
   margin-top: 5px;
-  font-size: 11px;
+  font-size: 12.5px;
   color: var(--faint);
   display: flex;
   flex-wrap: wrap;
@@ -355,18 +355,18 @@ a { color: inherit; }
   max-height: 60vh;
   overflow-y: auto;
 }
-.reader-panel__loading { color: var(--muted); font-size: 12px; }
+.reader-panel__loading { color: var(--muted); font-size: 13.5px; }
 
 .reader-panel .reader__bar {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12.5px;
   margin-bottom: 10px;
 }
-.reader-panel .reader__title { font-size: 16px; margin: 0 0 4px; color: var(--text-hi); }
-.reader-panel .reader__byline { color: var(--muted); font-size: 11px; margin: 0 0 12px; }
+.reader-panel .reader__title { font-size: 17.5px; margin: 0 0 4px; color: var(--text-hi); }
+.reader-panel .reader__byline { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
 
-.reader__content { font-size: 13px; line-height: 1.75; }
+.reader__content { font-size: 14.5px; line-height: 1.75; }
 .reader__content p { margin: 0 0 1em; }
 .reader__content img { height: auto; border-radius: 6px; }
 .reader__content a { color: var(--link); }
@@ -377,7 +377,7 @@ a { color: inherit; }
   border-radius: 6px;
 }
 .reader__content h1, .reader__content h2, .reader__content h3 { line-height: 1.3; color: var(--text-hi); }
-.reader__err { color: var(--danger); font-size: 12px; }
+.reader__err { color: var(--danger); font-size: 13.5px; }
 .reader__err span { color: var(--muted); }
 
 /* ---- standalone reader page --------------------------------------- */
@@ -391,13 +391,13 @@ a { color: inherit; }
 .reader-page .reader__bar {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 13.5px;
   margin-bottom: 20px;
 }
 .reader-page .reader__bar a { color: var(--link); text-decoration: none; }
 .reader-page .reader__title { font-size: 24px; line-height: 1.3; margin: 0 0 6px; color: var(--text-hi); }
 .reader-page .reader__byline { color: var(--muted); margin: 0 0 24px; }
-.reader-page .reader__content { font-size: 15px; line-height: 1.8; }
+.reader-page .reader__content { font-size: 16.5px; line-height: 1.8; }
 .reader-page .reader__content p { margin: 0 0 1.1em; }
 .reader-page .reader__content img { height: auto; border-radius: 8px; margin: 0.5em 0; }
 
@@ -408,13 +408,13 @@ a { color: inherit; }
 .weather__now { display: flex; align-items: center; gap: 12px; }
 .weather__icon { font-size: 32px; line-height: 1; }
 .weather__temp {
-  font-size: 27px;
+  font-size: 29px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-hi);
 }
 .weather__desc { display: flex; flex-direction: column; font-weight: 500; }
-.weather__sub { font-weight: 400; font-size: 11px; color: var(--muted); margin-top: 2px; }
+.weather__sub { font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 
 .weather__days {
   list-style: none;
@@ -430,10 +430,10 @@ a { color: inherit; }
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 12.5px;
   flex: 1;
 }
 .weather__day { color: var(--muted); }
-.weather__dayicon { font-size: 16px; }
+.weather__dayicon { font-size: 17.5px; }
 .weather__hl { font-variant-numeric: tabular-nums; font-weight: 500; }
 .weather__lo { color: var(--faint); font-weight: 400; margin-left: 4px; }
