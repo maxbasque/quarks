@@ -71,3 +71,9 @@ pages:
           - { title: NHL, type: standings, league: nhl, group: division, team: MTL, ttl: 2h }
           - { title: MLB, type: standings, league: mlb, ttl: 2h }
           # nhl group: division | conference | league
+
+      - type: nhl
+        column: 2
+        title: Around the league
+        mode: scores          # recent final scores, all teams
+        ttl: 20m

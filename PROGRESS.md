@@ -55,6 +55,10 @@ What works, verified on the Bazzite box 2026-09-08:
 - **NHL schedule**: the game item summary now leads with the local date/time
   ("Sat Sep 19, 7:00 PM · Scotiabank Arena"), formatted in the club's timezone,
   alongside the existing "in 9d".
+- **`type: nhl, mode: scores`**: league-wide recent final scores. Walks the
+  `score/{date}` endpoint back from "now" collecting finished/live games,
+  newest first. Item title "MTL 4 – 3 TOR", winner's logo, "Final (OT) · Oct 8".
+  (Empty until the season starts.)
 
 ---
 

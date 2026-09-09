@@ -1,5 +1,7 @@
-// Package nhl turns an NHL team's season schedule into feed items — one per
-// game, soonest first — using the public api-web.nhle.com endpoints (no key).
+// Package nhl talks to the public, keyless api-web.nhle.com. Two modes:
+//
+//	mode: schedule (default) — one team's upcoming games, soonest first
+//	mode: scores             — recent final scores from around the league
 package nhl
 
 import (
@@ -7,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -15,20 +18,24 @@ import (
 )
 
 const (
-	defaultEndpoint = "https://api-web.nhle.com/v1/club-schedule-season/%s/now"
-	gameCenterURL   = "https://www.nhl.com/gamecenter/"
-	userAgent       = "Mozilla/5.0 (compatible; quarks/0.1; +https://github.com/maxbasque/quarks)"
+	scheduleURL   = "https://api-web.nhle.com/v1/club-schedule-season/%s/now"
+	scoreURL      = "https://api-web.nhle.com/v1/score/%s"
+	gameCenterURL = "https://www.nhl.com/gamecenter/"
+	userAgent     = "Mozilla/5.0 (compatible; quarks/0.1; +https://github.com/maxbasque/quarks)"
 )
 
 type settings struct {
 	Team string `yaml:"team"` // 3-letter abbrev, e.g. MTL
+	Mode string `yaml:"mode"` // schedule | scores
 }
 
 type Provider struct {
-	team     string
-	limit    int
-	endpoint string
-	http     *http.Client
+	mode        string
+	team        string
+	limit       int
+	scheduleURL string
+	scoreURL    string
+	http        *http.Client
 }
 
 // New is the core.Factory for "nhl".
@@ -37,27 +44,57 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	if err := cfg.Decode(&s); err != nil {
 		return nil, err
 	}
-	s.Team = strings.ToUpper(strings.TrimSpace(s.Team))
-	if len(s.Team) != 3 {
+	mode := strings.ToLower(strings.TrimSpace(s.Mode))
+	if mode == "" {
+		mode = "schedule"
+	}
+	if mode != "schedule" && mode != "scores" {
+		return nil, fmt.Errorf("nhl widget %q: mode must be schedule or scores", cfg.Title)
+	}
+	team := strings.ToUpper(strings.TrimSpace(s.Team))
+	if mode == "schedule" && len(team) != 3 {
 		return nil, fmt.Errorf("nhl widget %q: set team to a 3-letter code, e.g. MTL", cfg.Title)
 	}
 	limit := cfg.Limit
 	if limit <= 0 {
-		limit = 10
+		limit = 12
 	}
-	return &Provider{team: s.Team, limit: limit, endpoint: defaultEndpoint, http: &http.Client{}}, nil
+	return &Provider{
+		mode: mode, team: team, limit: limit,
+		scheduleURL: scheduleURL, scoreURL: scoreURL, http: &http.Client{},
+	}, nil
+}
+
+func (p *Provider) get(ctx context.Context, url string, v any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("nhl api: http %d", resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 type team struct {
 	Abbrev     string         `json:"abbrev"`
 	CommonName map[string]any `json:"commonName"`
+	Name       map[string]any `json:"name"`
 	Score      *int           `json:"score"`
 	Logo       string         `json:"logo"`
 }
 
 func (t team) name() string {
-	if v, ok := t.CommonName["default"].(string); ok && v != "" {
-		return v
+	for _, m := range []map[string]any{t.CommonName, t.Name} {
+		if v, ok := m["default"].(string); ok && v != "" {
+			return v
+		}
 	}
 	return t.Abbrev
 }
@@ -70,74 +107,60 @@ type game struct {
 	Venue        struct {
 		Default string `json:"default"`
 	} `json:"venue"`
+	GameOutcome struct {
+		LastPeriodType string `json:"lastPeriodType"`
+	} `json:"gameOutcome"`
 	Away team `json:"awayTeam"`
 	Home team `json:"homeTeam"`
 }
 
-type response struct {
-	ClubTimezone string `json:"clubTimezone"`
-	Games        []game `json:"games"`
+func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
+	if p.mode == "scores" {
+		return p.fetchScores(ctx)
+	}
+	return p.fetchSchedule(ctx)
 }
 
-func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
-	url := fmt.Sprintf(p.endpoint, p.team)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return core.Payload{}, err
-	}
-	req.Header.Set("User-Agent", userAgent)
+// ---- schedule ----------------------------------------------------------
 
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return core.Payload{}, err
+func (p *Provider) fetchSchedule(ctx context.Context) (core.Payload, error) {
+	var data struct {
+		ClubTimezone string `json:"clubTimezone"`
+		Games        []game `json:"games"`
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return core.Payload{}, fmt.Errorf("nhl api: http %d", resp.StatusCode)
-	}
-
-	var data response
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := p.get(ctx, fmt.Sprintf(p.scheduleURL, p.team), &data); err != nil {
 		return core.Payload{}, err
 	}
 
 	loc := time.UTC
-	if data.ClubTimezone != "" {
-		if l, err := time.LoadLocation(data.ClubTimezone); err == nil {
-			loc = l
-		}
+	if l, err := time.LoadLocation(data.ClubTimezone); err == nil {
+		loc = l
 	}
 
-	cutoff := time.Now().Add(-30 * time.Hour) // keep a game visible through the night after
+	cutoff := time.Now().Add(-30 * time.Hour)
 	var items []core.Item
 	for _, g := range data.Games {
 		start, err := time.Parse(time.RFC3339, g.StartTimeUTC)
 		if err != nil || start.Before(cutoff) {
 			continue
 		}
-		items = append(items, p.toItem(g, start, loc))
+		items = append(items, p.scheduleItem(g, start, loc))
 		if len(items) >= p.limit {
 			break
 		}
 	}
-	return core.Feed(items), nil // already soonest-first from the API
+	return core.Feed(items), nil
 }
 
-func (p *Provider) toItem(g game, start time.Time, loc *time.Location) core.Item {
+func (p *Provider) scheduleItem(g game, start time.Time, loc *time.Location) core.Item {
 	us, them := g.Home, g.Away
-	home := true
+	title := "vs " + them.name()
 	if g.Away.Abbrev == p.team {
 		us, them = g.Away, g.Home
-		home = false
-	}
-
-	title := "vs " + them.name()
-	if !home {
 		title = "@ " + them.name()
 	}
 
-	when := start.In(loc).Format("Mon Jan 2, 3:04 PM")
-	summary := when
+	summary := start.In(loc).Format("Mon Jan 2, 3:04 PM")
 	if extra := gameExtra(g, us, them); extra != "" {
 		summary += "  ·  " + extra
 	}
@@ -153,6 +176,26 @@ func (p *Provider) toItem(g game, start time.Time, loc *time.Location) core.Item
 	}
 }
 
+// gameExtra is the score once a game is under way, otherwise the venue.
+func gameExtra(g game, us, them team) string {
+	live := g.GameState == "LIVE" || g.GameState == "CRIT"
+	done := g.GameState == "OFF" || g.GameState == "FINAL"
+	if (live || done) && us.Score != nil && them.Score != nil {
+		r := fmt.Sprintf("%d–%d", *us.Score, *them.Score)
+		switch {
+		case live:
+			return "Live " + r
+		case *us.Score > *them.Score:
+			return "Won " + r
+		case *us.Score < *them.Score:
+			return "Lost " + r
+		default:
+			return "Final " + r
+		}
+	}
+	return g.Venue.Default
+}
+
 func gameTypeLabel(t int) string {
 	switch t {
 	case 1:
@@ -164,23 +207,80 @@ func gameTypeLabel(t int) string {
 	}
 }
 
-// gameExtra is the score (once a game is under way) or the venue.
-func gameExtra(g game, us, them team) string {
-	live := g.GameState == "LIVE" || g.GameState == "CRIT"
-	done := g.GameState == "OFF" || g.GameState == "FINAL"
+// ---- scores (league-wide) -------------------------------------------
 
-	if (live || done) && us.Score != nil && them.Score != nil {
-		result := fmt.Sprintf("%d–%d", *us.Score, *them.Score)
-		switch {
-		case live:
-			return "Live " + result
-		case *us.Score > *them.Score:
-			return "Won " + result
-		case *us.Score < *them.Score:
-			return "Lost " + result
-		default:
-			return "Final " + result
+func (p *Provider) fetchScores(ctx context.Context) (core.Payload, error) {
+	date := "now"
+	seen := map[int64]bool{}
+	var items []core.Item
+
+	for hop := 0; hop < 5 && len(items) < p.limit; hop++ {
+		var d struct {
+			PrevDate string `json:"prevDate"`
+			Games    []game `json:"games"`
 		}
+		if err := p.get(ctx, fmt.Sprintf(p.scoreURL, date), &d); err != nil {
+			if hop == 0 {
+				return core.Payload{}, err
+			}
+			break
+		}
+		for _, g := range d.Games {
+			if seen[g.ID] || g.Away.Score == nil || g.Home.Score == nil {
+				continue
+			}
+			switch g.GameState {
+			case "OFF", "FINAL", "LIVE", "CRIT":
+				seen[g.ID] = true
+				items = append(items, scoreItem(g))
+			}
+		}
+		if d.PrevDate == "" || d.PrevDate == date {
+			break
+		}
+		date = d.PrevDate
 	}
-	return g.Venue.Default
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].PublishedAt.After(items[j].PublishedAt)
+	})
+	if len(items) > p.limit {
+		items = items[:p.limit]
+	}
+	return core.Feed(items), nil
+}
+
+func scoreItem(g game) core.Item {
+	a, h := g.Away, g.Home
+	as, hs := *a.Score, *h.Score
+
+	winner := h
+	if as > hs {
+		winner = a
+	}
+
+	state := "Final"
+	switch {
+	case g.GameState == "LIVE" || g.GameState == "CRIT":
+		state = "Live"
+	case g.GameOutcome.LastPeriodType == "OT":
+		state = "Final (OT)"
+	case g.GameOutcome.LastPeriodType == "SO":
+		state = "Final (SO)"
+	}
+
+	start, _ := time.Parse(time.RFC3339, g.StartTimeUTC)
+	summary := state
+	if !start.IsZero() {
+		summary += "  ·  " + start.Local().Format("Mon Jan 2")
+	}
+
+	return core.Item{
+		ID:          strconv.FormatInt(g.ID, 10),
+		Title:       fmt.Sprintf("%s %d – %d %s", a.Abbrev, as, hs, h.Abbrev),
+		URL:         gameCenterURL + strconv.FormatInt(g.ID, 10),
+		PublishedAt: start,
+		Thumbnail:   winner.Logo,
+		Summary:     summary,
+	}
 }

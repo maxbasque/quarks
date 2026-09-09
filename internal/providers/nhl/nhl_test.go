@@ -52,7 +52,7 @@ func TestFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	p.(*Provider).endpoint = srv.URL + "/v1/club-schedule-season/%s/now"
+	p.(*Provider).scheduleURL = srv.URL + "/v1/club-schedule-season/%s/now"
 
 	got, err := p.Fetch(context.Background())
 	if err != nil {
@@ -83,5 +83,45 @@ func TestFetch(t *testing.T) {
 func TestRequiresTeam(t *testing.T) {
 	if _, err := New(widgetConfig(t, "type: nhl\ntitle: X\n")); err == nil {
 		t.Error("expected an error without team")
+	}
+	// scores mode doesn't need a team
+	if _, err := New(widgetConfig(t, "type: nhl\ntitle: X\nmode: scores\n")); err != nil {
+		t.Errorf("scores mode should not require a team: %v", err)
+	}
+}
+
+func TestScores(t *testing.T) {
+	body := `{"prevDate":"","games":[
+	  {"id":10,"startTimeUTC":"2026-10-08T23:00:00Z","gameState":"OFF",
+	   "gameOutcome":{"lastPeriodType":"OT"},
+	   "awayTeam":{"abbrev":"MTL","name":{"default":"Canadiens"},"score":4,"logo":"mtl.svg"},
+	   "homeTeam":{"abbrev":"TOR","name":{"default":"Maple Leafs"},"score":3,"logo":"tor.svg"}},
+	  {"id":11,"startTimeUTC":"2026-10-08T22:00:00Z","gameState":"FUT",
+	   "awayTeam":{"abbrev":"BOS"},"homeTeam":{"abbrev":"NYR"}}
+	]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	p, _ := New(widgetConfig(t, "type: nhl\ntitle: League\nmode: scores\n"))
+	p.(*Provider).scoreURL = srv.URL + "/v1/score/%s"
+
+	got, err := p.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if len(got.Items) != 1 { // the FUT game is skipped
+		t.Fatalf("want 1 finished game, got %d", len(got.Items))
+	}
+	it := got.Items[0]
+	if it.Title != "MTL 4 – 3 TOR" {
+		t.Errorf("title = %q", it.Title)
+	}
+	if !strings.HasPrefix(it.Summary, "Final (OT)") {
+		t.Errorf("summary = %q", it.Summary)
+	}
+	if it.Thumbnail != "mtl.svg" {
+		t.Errorf("thumbnail should be the winner's logo, got %q", it.Thumbnail)
 	}
 }
