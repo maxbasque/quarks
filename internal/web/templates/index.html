@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="{{ .Theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quark's</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <meta http-equiv="refresh" content="60">
+</head>
+<body>
+  <main class="grid" style="--cols: {{ len .Columns }}">
+    {{ range .Columns }}
+    <div class="col">
+      {{ range . }}
+      <section class="widget">
+        <header class="widget__head">
+          <h2>{{ .Title }}</h2>
+          {{ if .Badge }}<span class="badge{{ if .Danger }} badge--danger{{ end }}">{{ .Badge }}</span>{{ end }}
+        </header>
+        <ul class="items">
+          {{ range .Items }}
+          <li class="item">
+            <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener">{{ .Title }}</a>
+            <div class="item__meta">
+              {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
+              {{ if not .PublishedAt.IsZero }}<span>{{ since .PublishedAt }} ago</span>{{ end }}
+              {{ if gt .Score 0 }}<span>{{ .Score }} pts</span>{{ end }}
+              {{ if gt .Comments 0 }}<span>{{ .Comments }} comments</span>{{ end }}
+            </div>
+          </li>
+          {{ else }}
+          <li class="item item--empty">No items yet.</li>
+          {{ end }}
+        </ul>
+      </section>
+      {{ end }}
+    </div>
+    {{ end }}
+  </main>
+</body>
+</html>

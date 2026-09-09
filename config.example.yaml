@@ -1,0 +1,22 @@
+window:
+  columns: 3
+  theme: dark
+
+widgets:
+  - type: rss
+    column: 1
+    title: Hacker News
+    source: Hacker News
+    ttl: 20m
+    limit: 15
+    feeds:
+      - https://hnrss.org/frontpage
+
+  # M1+: verify the real Radio-Canada feed URLs (plan §14 Q2) before enabling.
+  # - type: rss
+  #   column: 1
+  #   title: Radio-Canada
+  #   ttl: 15m
+  #   limit: 12
+  #   feeds:
+  #     - https://ici.radio-canada.ca/rss/XXXX
