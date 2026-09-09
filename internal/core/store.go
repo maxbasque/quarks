@@ -12,14 +12,15 @@ import (
 // items plus freshness metadata. The UI never blocks on the network — it renders
 // whatever is here.
 type WidgetState struct {
-	Key      string    `json:"key"`
-	Title    string    `json:"title"`
-	Column   int       `json:"column"`
-	Type     string    `json:"type"`
-	Items    []Item    `json:"items"`
-	LastOK   time.Time `json:"last_ok"`   // zero until a fetch succeeds
-	LastErr  string    `json:"last_err"`  // last fetch error, "" if last fetch was ok
-	LastTry  time.Time `json:"last_try"`  //
+	Key     string    `json:"key"`
+	Title   string    `json:"title"`
+	Order   int       `json:"order"`    // position in the config, for stable UI ordering
+	Column  int       `json:"column"`   //
+	Type    string    `json:"type"`     //
+	Items   []Item    `json:"items"`    //
+	LastOK  time.Time `json:"last_ok"`  // zero until a fetch succeeds
+	LastErr string    `json:"last_err"` // last fetch error, "" if last fetch was ok
+	LastTry time.Time `json:"last_try"` //
 }
 
 // Stale reports whether the newest good data is older than ttl.
@@ -45,18 +46,38 @@ func NewStore(cacheDir string) (*Store, error) {
 	}, nil
 }
 
-// Register seeds a widget's state, loading a disk snapshot if one exists.
-func (s *Store) Register(key, title string, column int, typ string) {
+// Register seeds a widget's state. On first sight it loads any disk snapshot; on
+// a config reload it keeps the in-memory items and just refreshes the identity
+// fields, so a reload never blanks the dashboard.
+func (s *Store) Register(key, title string, order, column int, typ string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	st := &WidgetState{Key: key, Title: title, Column: column, Type: typ}
+	if st, ok := s.states[key]; ok {
+		st.Title, st.Order, st.Column, st.Type = title, order, column, typ
+		return
+	}
+
+	st := &WidgetState{Key: key, Title: title, Order: order, Column: column, Type: typ}
 	if data, err := os.ReadFile(s.path(key)); err == nil {
 		_ = json.Unmarshal(data, st)
-		// config wins for identity fields
-		st.Key, st.Title, st.Column, st.Type = key, title, column, typ
+		st.Key, st.Title, st.Order, st.Column, st.Type = key, title, order, column, typ
 	}
 	s.states[key] = st
+}
+
+// Retain drops in-memory state (and the disk snapshot) for any widget whose key
+// is not in keep — i.e. widgets removed from the config on reload.
+func (s *Store) Retain(keep map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for k := range s.states {
+		if !keep[k] {
+			delete(s.states, k)
+			_ = os.Remove(s.path(k))
+		}
+	}
 }
 
 // SetItems records a successful fetch and writes the snapshot.

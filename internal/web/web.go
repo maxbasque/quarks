@@ -6,33 +6,46 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"sync/atomic"
 	"time"
 
-	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
 )
 
 //go:embed templates/*.html static/*
 var assets embed.FS
 
-type widgetTTL map[string]time.Duration
+// Meta is the config-derived context the renderer needs beyond what the Store
+// already carries. The app publishes a new one on every config reload.
+type Meta struct {
+	Columns int
+	Theme   string
+	TTLs    map[string]time.Duration // widget key -> ttl, for the stale badge
+}
 
 // Server renders the dashboard from whatever is currently in the store.
 type Server struct {
 	store *core.Store
-	cfg   *config.Config
-	ttls  widgetTTL // widget key -> ttl, for the stale badge
+	meta  atomic.Pointer[Meta]
 	tmpl  *template.Template
 }
 
-func NewServer(store *core.Store, cfg *config.Config, ttls map[string]time.Duration) (*Server, error) {
+func NewServer(store *core.Store) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"since": humanSince,
 	}).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
-	return &Server{store: store, cfg: cfg, ttls: ttls, tmpl: tmpl}, nil
+	s := &Server{store: store, tmpl: tmpl}
+	s.meta.Store(&Meta{Columns: 3, Theme: "dark"})
+	return s, nil
+}
+
+// Publish swaps in a new config-derived Meta. Safe to call concurrently with
+// request handling.
+func (s *Server) Publish(m Meta) {
+	s.meta.Store(&m)
 }
 
 func (s *Server) Routes() *http.ServeMux {
@@ -44,9 +57,9 @@ func (s *Server) Routes() *http.ServeMux {
 
 type widgetVM struct {
 	Title  string
-	Source string
 	Items  []core.Item
 	Badge  string // "", "stale · 14m", "offline"
+	Fresh  string // "updated 3m ago" / "never"
 	Danger bool
 }
 
@@ -61,17 +74,23 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	meta := s.meta.Load()
 	states := s.store.Snapshot()
-	sort.Slice(states, func(i, j int) bool { return states[i].Key < states[j].Key })
+	sort.Slice(states, func(i, j int) bool {
+		if states[i].Order != states[j].Order {
+			return states[i].Order < states[j].Order
+		}
+		return states[i].Key < states[j].Key
+	})
 
-	n := s.cfg.Window.Columns
+	n := meta.Columns
 	if n < 1 {
 		n = 1
 	}
 	cols := make([][]widgetVM, n)
 	for _, st := range states {
-		vm := widgetVM{Title: st.Title, Items: st.Items}
-		ttl := s.ttls[st.Key]
+		vm := widgetVM{Title: st.Title, Items: st.Items, Fresh: freshLabel(st.LastOK)}
+		ttl := meta.TTLs[st.Key]
 		switch {
 		case len(st.Items) == 0 && st.LastErr != "":
 			vm.Badge, vm.Danger = "offline", true
@@ -88,11 +107,18 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		cols[ci] = append(cols[ci], vm)
 	}
 
-	page := pageVM{Theme: s.cfg.Window.Theme, Columns: cols}
+	page := pageVM{Theme: meta.Theme, Columns: cols}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "index.html", page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func freshLabel(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	return "updated " + humanSince(t) + " ago"
 }
 
 func humanSince(t time.Time) string {

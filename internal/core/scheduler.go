@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -32,12 +33,20 @@ func (s *Scheduler) Add(key string, cfg WidgetConfig, p Provider) {
 	s.jobs = append(s.jobs, job{key: key, ttl: cfg.TTL, limit: cfg.Limit, provider: p})
 }
 
-// Run starts every widget loop and blocks until ctx is cancelled.
+// Run starts every widget loop and blocks until ctx is cancelled and every loop
+// has returned. That lets a caller (config reload) know the old scheduler is
+// fully stopped before starting a replacement.
 func (s *Scheduler) Run(ctx context.Context) {
+	var wg sync.WaitGroup
 	for _, j := range s.jobs {
-		go s.loop(ctx, j)
+		wg.Add(1)
+		go func(j job) {
+			defer wg.Done()
+			s.loop(ctx, j)
+		}(j)
 	}
 	<-ctx.Done()
+	wg.Wait()
 }
 
 func (s *Scheduler) loop(ctx context.Context, j job) {
@@ -61,6 +70,9 @@ func (s *Scheduler) fetch(ctx context.Context, j job) {
 
 	items, err := j.provider.Fetch(fctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return // shutting down or reloading — not a real feed failure
+		}
 		s.log.Warn("widget fetch failed", "widget", j.key, "err", err)
 		s.store.SetError(j.key, err)
 		return
