@@ -27,6 +27,15 @@ type Meta struct {
 	Columns int
 	Theme   string
 	TTLs    map[string]time.Duration // widget key -> ttl, for the stale badge
+	Boxes   []Box                    // dashboard layout, in config order
+}
+
+// Box is one card. Members are widget keys; more than one means a tabbed card.
+type Box struct {
+	Column  int
+	Order   int
+	Title   string
+	Members []string
 }
 
 // Server renders the dashboard from whatever is currently in the store.
@@ -135,18 +144,26 @@ func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type widgetVM struct {
+type tabVM struct {
+	Key     string
 	Title   string
 	Items   []core.Item
 	Weather *core.Weather
 	Badge   string // "", "stale · 14m", "offline"
-	Fresh   string // "updated 3m ago" / "never"
+	Fresh   string // "updated 3m ago" / "never updated"
 	Danger  bool
+}
+
+type boxVM struct {
+	Title  string // optional group label
+	Tabs   []tabVM
+	Tabbed bool
+	Danger bool
 }
 
 type pageVM struct {
 	Theme   string
-	Columns [][]widgetVM
+	Columns [][]boxVM
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -156,47 +173,62 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta := s.meta.Load()
-	states := s.store.Snapshot()
-	sort.Slice(states, func(i, j int) bool {
-		if states[i].Order != states[j].Order {
-			return states[i].Order < states[j].Order
-		}
-		return states[i].Key < states[j].Key
-	})
+
+	byKey := make(map[string]core.WidgetState)
+	for _, st := range s.store.Snapshot() {
+		byKey[st.Key] = st
+	}
 
 	n := meta.Columns
 	if n < 1 {
 		n = 1
 	}
-	cols := make([][]widgetVM, n)
-	for _, st := range states {
-		items := make([]core.Item, len(st.Items))
-		copy(items, st.Items)
-		for i := range items {
-			if strings.EqualFold(items[i].Source, st.Title) {
-				items[i].Source = "" // redundant with the widget header
-			}
-			if strings.EqualFold(items[i].Author, items[i].Source) {
-				items[i].Author = "" // e.g. a YouTube channel is both
-			}
-		}
+	cols := make([][]boxVM, n)
 
-		vm := widgetVM{Title: st.Title, Items: items, Weather: st.Weather, Fresh: freshLabel(st.LastOK)}
-		ttl := meta.TTLs[st.Key]
-		switch {
-		case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
-			vm.Badge, vm.Danger = "offline", true
-		case st.LastErr != "":
-			vm.Badge = "stale · " + compactSince(st.LastOK)
-		case ttl > 0 && st.Stale(ttl*2):
-			vm.Badge = "stale · " + compactSince(st.LastOK)
-		}
+	boxes := append([]Box(nil), meta.Boxes...)
+	sort.SliceStable(boxes, func(i, j int) bool { return boxes[i].Order < boxes[j].Order })
 
-		ci := st.Column - 1
+	for _, b := range boxes {
+		bv := boxVM{Title: b.Title}
+		for _, key := range b.Members {
+			st := byKey[key]
+			tv := tabVM{
+				Key:     key,
+				Title:   st.Title,
+				Weather: st.Weather,
+				Fresh:   freshLabel(st.LastOK),
+			}
+
+			items := make([]core.Item, len(st.Items))
+			copy(items, st.Items)
+			for i := range items {
+				if strings.EqualFold(items[i].Source, st.Title) {
+					items[i].Source = ""
+				}
+				if strings.EqualFold(items[i].Author, items[i].Source) {
+					items[i].Author = ""
+				}
+			}
+			tv.Items = items
+
+			switch ttl := meta.TTLs[key]; {
+			case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
+				tv.Badge, tv.Danger = "offline", true
+			case st.LastErr != "":
+				tv.Badge = "stale · " + compactSince(st.LastOK)
+			case ttl > 0 && st.Stale(ttl*2):
+				tv.Badge = "stale · " + compactSince(st.LastOK)
+			}
+			bv.Danger = bv.Danger || tv.Danger
+			bv.Tabs = append(bv.Tabs, tv)
+		}
+		bv.Tabbed = len(bv.Tabs) > 1
+
+		ci := b.Column - 1
 		if ci < 0 || ci >= n {
 			ci = 0
 		}
-		cols[ci] = append(cols[ci], vm)
+		cols[ci] = append(cols[ci], bv)
 	}
 
 	page := pageVM{Theme: meta.Theme, Columns: cols}

@@ -17,12 +17,23 @@ import (
 type settings struct {
 	Feeds  []string `yaml:"feeds"`
 	Source string   `yaml:"source"` // display label override
+	// interleave: with several feeds, round-robin their items (newest from each,
+	// then next from each) instead of merging into one date-sorted list. Keeps a
+	// busy feed from crowding out the others — the default for youtube.
+	Interleave bool `yaml:"interleave"`
 }
 
 type Provider struct {
-	feeds  []string
-	source string
-	parser *gofeed.Parser
+	feeds      []string
+	source     string
+	interleave bool
+	parser     *gofeed.Parser
+}
+
+func newParser() *gofeed.Parser {
+	p := gofeed.NewParser()
+	p.UserAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
+	return p
 }
 
 // New is the core.Factory for "rss".
@@ -35,27 +46,22 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 		return nil, fmt.Errorf("rss widget %q: no feeds", cfg.Title)
 	}
 
-	p := gofeed.NewParser()
-	p.UserAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
-
 	source := s.Source
 	if source == "" {
 		source = cfg.Title
 	}
 
-	return &Provider{feeds: s.Feeds, source: source, parser: p}, nil
+	return &Provider{feeds: s.Feeds, source: source, interleave: s.Interleave, parser: newParser()}, nil
 }
 
 // NewWithFeeds builds an rss provider directly, for other providers that are
 // really just RSS with a nicer config surface (e.g. youtube).
-func NewWithFeeds(feeds []string, source string) core.Provider {
-	p := gofeed.NewParser()
-	p.UserAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
-	return &Provider{feeds: feeds, source: source, parser: p}
+func NewWithFeeds(feeds []string, source string, interleave bool) core.Provider {
+	return &Provider{feeds: feeds, source: source, interleave: interleave, parser: newParser()}
 }
 
 func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
-	var items []core.Item
+	var perFeed [][]core.Item
 	var firstErr error
 
 	for _, url := range p.feeds {
@@ -70,20 +76,54 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		if source == "" && feed.Title != "" {
 			source = feed.Title
 		}
+		one := make([]core.Item, 0, len(feed.Items))
 		for _, e := range feed.Items {
-			items = append(items, toItem(e, source))
+			one = append(one, toItem(e, source))
 		}
+		sortByDate(one)
+		perFeed = append(perFeed, one)
 	}
 
-	// If every feed failed, surface the error. A partial success is returned.
-	if items == nil && firstErr != nil {
-		return core.Payload{}, firstErr
+	if len(perFeed) == 0 {
+		if firstErr != nil {
+			return core.Payload{}, firstErr
+		}
+		return core.Feed(nil), nil
 	}
 
-	sort.Slice(items, func(i, j int) bool {
+	var items []core.Item
+	if p.interleave && len(perFeed) > 1 {
+		items = roundRobin(perFeed)
+	} else {
+		for _, f := range perFeed {
+			items = append(items, f...)
+		}
+		sortByDate(items)
+	}
+	return core.Feed(items), nil
+}
+
+func sortByDate(items []core.Item) {
+	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].PublishedAt.After(items[j].PublishedAt)
 	})
-	return core.Feed(items), nil
+}
+
+// roundRobin takes the 1st item of each feed, then the 2nd of each, and so on.
+func roundRobin(feeds [][]core.Item) []core.Item {
+	var out []core.Item
+	for i := 0; ; i++ {
+		done := true
+		for _, f := range feeds {
+			if i < len(f) {
+				out = append(out, f[i])
+				done = false
+			}
+		}
+		if done {
+			return out
+		}
+	}
 }
 
 func toItem(e *gofeed.Item, source string) core.Item {

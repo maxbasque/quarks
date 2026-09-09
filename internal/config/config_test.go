@@ -13,6 +13,18 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	}
 }
 
+// feeds decodes the "feeds" list of the single widget in box bi.
+func feeds(t *testing.T, cfg *Config, bi int) []string {
+	t.Helper()
+	var s struct {
+		Feeds []string `yaml:"feeds"`
+	}
+	if err := cfg.Boxes[bi].Widgets[0].Decode(&s); err != nil {
+		t.Fatal(err)
+	}
+	return s.Feeds
+}
+
 func TestLoadWithSecretsAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -40,21 +52,50 @@ widgets:
 		t.Errorf("columns = %d", cfg.Window.Columns)
 	}
 
-	var s struct {
-		Feeds []string `yaml:"feeds"`
+	if got := feeds(t, cfg, 0); len(got) != 1 || got[0] != "https://reddit.example/.rss?feed=TOKEN" {
+		t.Errorf("secret not substituted: %v", got)
 	}
-	if err := cfg.Widgets[0].Decode(&s); err != nil {
-		t.Fatal(err)
+	if got := feeds(t, cfg, 1); got[0] != "https://cal.example/x.ics" {
+		t.Errorf("env var not substituted: %v", got)
 	}
-	if len(s.Feeds) != 1 || s.Feeds[0] != "https://reddit.example/.rss?feed=TOKEN" {
-		t.Errorf("secret not substituted: %v", s.Feeds)
-	}
+}
 
-	if err := cfg.Widgets[1].Decode(&s); err != nil {
-		t.Fatal(err)
+func TestGroupBecomesOneBoxWithTabs(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, `
+widgets:
+  - type: hackernews
+    column: 1
+    title: HN
+  - type: group
+    column: 2
+    title: News
+    tabs:
+      - { type: rss, title: A, feeds: [http://a] }
+      - { type: rss, title: B, feeds: [http://b] }
+`, 0o644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
 	}
-	if s.Feeds[0] != "https://cal.example/x.ics" {
-		t.Errorf("env var not substituted: %v", s.Feeds)
+	if len(cfg.Boxes) != 2 {
+		t.Fatalf("want 2 boxes, got %d", len(cfg.Boxes))
+	}
+	if len(cfg.Boxes[0].Widgets) != 1 {
+		t.Errorf("plain widget box should have 1 widget")
+	}
+	g := cfg.Boxes[1]
+	if g.Title != "News" || len(g.Widgets) != 2 {
+		t.Fatalf("group box = %q with %d widgets", g.Title, len(g.Widgets))
+	}
+	if g.Column != 2 || g.Widgets[0].Column != 2 || g.Widgets[1].Column != 2 {
+		t.Errorf("tabs should inherit the group column: %d / %d / %d",
+			g.Column, g.Widgets[0].Column, g.Widgets[1].Column)
+	}
+	if g.Widgets[0].Title != "A" || g.Widgets[1].Title != "B" {
+		t.Errorf("tab titles = %q, %q", g.Widgets[0].Title, g.Widgets[1].Title)
 	}
 }
 
@@ -97,7 +138,7 @@ widgets:
 	var s struct {
 		Source string `yaml:"source"`
 	}
-	_ = cfg.Widgets[0].Decode(&s)
+	_ = cfg.Boxes[0].Widgets[0].Decode(&s)
 	if s.Source != "" {
 		t.Errorf("unresolved token should be empty, got %q", s.Source)
 	}

@@ -132,20 +132,30 @@ func (a *App) reload(ctx context.Context) error {
 	}
 
 	sched := core.NewScheduler(a.store, a.log)
-	ttls := make(map[string]time.Duration, len(cfg.Widgets))
-	keep := make(map[string]bool, len(cfg.Widgets))
-	seen := make(map[string]bool, len(cfg.Widgets))
+	ttls := map[string]time.Duration{}
+	keep := map[string]bool{}
+	seen := map[string]bool{}
+	var boxes []web.Box
+	order := 0
 
-	for i, wc := range cfg.Widgets {
-		key := widgetKey(wc, seen)
-		provider, err := a.registry.Build(wc)
-		if err != nil {
-			return fmt.Errorf("widget %d (%s): %w", i, wc.Type, err)
+	for bi, box := range cfg.Boxes {
+		var members []string
+		for _, wc := range box.Widgets {
+			key := widgetKey(wc, seen)
+			provider, err := a.registry.Build(wc)
+			if err != nil {
+				return fmt.Errorf("box %d (%s): %w", bi, wc.Type, err)
+			}
+			a.store.Register(key, displayTitle(wc), order, wc.Column, wc.Type)
+			sched.Add(key, wc, provider)
+			ttls[key] = wc.TTL
+			keep[key] = true
+			members = append(members, key)
+			order++
 		}
-		a.store.Register(key, displayTitle(wc), i, wc.Column, wc.Type)
-		sched.Add(key, wc, provider)
-		ttls[key] = wc.TTL
-		keep[key] = true
+		boxes = append(boxes, web.Box{
+			Column: box.Column, Order: bi, Title: box.Title, Members: members,
+		})
 	}
 	a.store.Retain(keep)
 
@@ -167,8 +177,13 @@ func (a *App) reload(ctx context.Context) error {
 		}
 	}
 
-	a.srv.Publish(web.Meta{Columns: cfg.Window.Columns, Theme: cfg.Window.Theme, TTLs: ttls})
-	a.log.Info("config loaded", "widgets", len(cfg.Widgets))
+	a.srv.Publish(web.Meta{
+		Columns: cfg.Window.Columns,
+		Theme:   cfg.Window.Theme,
+		TTLs:    ttls,
+		Boxes:   boxes,
+	})
+	a.log.Info("config loaded", "boxes", len(cfg.Boxes), "widgets", len(keep))
 	return nil
 }
 

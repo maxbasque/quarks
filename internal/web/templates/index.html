@@ -25,58 +25,32 @@
     {{ range .Columns }}
     <div class="col">
       {{ range . }}
-      <section class="widget{{ if .Danger }} widget--danger{{ end }}">
-        <header class="widget__head">
-          <h2>{{ .Title }}</h2>
-          <div class="widget__status">
-            {{ if .Badge }}<span class="badge{{ if .Danger }} badge--danger{{ end }}">{{ .Badge }}</span>{{ end }}
+      {{ $box := . }}
+      <section class="box{{ if .Tabbed }} box--tabbed{{ end }}{{ if .Danger }} box--danger{{ end }}"
+               data-box="{{ (index .Tabs 0).Key }}">
+        <header class="box__head">
+          <div class="box__tabs" role="tablist">
+            {{ if .Title }}<span class="box__label">{{ .Title }}</span>{{ end }}
+            {{ range $i, $t := .Tabs }}
+            <button type="button" class="box__tab{{ if eq $i 0 }} is-active{{ end }}" role="tab"
+                    data-tab="{{ $i }}" data-fresh="{{ $t.Fresh }}" data-badge="{{ $t.Badge }}"
+                    {{ if $t.Danger }}data-danger="1"{{ end }}>{{ $t.Title }}</button>
+            {{ end }}
+          </div>
+          <div class="box__status">
+            {{ with (index .Tabs 0) }}
+            <span class="badge{{ if .Danger }} badge--danger{{ end }}"{{ if not .Badge }} hidden{{ end }}>{{ .Badge }}</span>
             <span class="fresh">{{ .Fresh }}</span>
+            {{ end }}
           </div>
         </header>
-        {{ with .Weather }}
-        <div class="weather">
-          <div class="weather__now">
-            <span class="weather__icon">{{ wicon .Code }}</span>
-            <span class="weather__temp">{{ temp .Current }}</span>
-            <span class="weather__desc">
-              {{ .Condition }}
-              <span class="weather__sub">feels {{ temp .FeelsLike }} · today {{ temp .Today.Low }} / {{ temp .Today.High }}</span>
-            </span>
+        <div class="box__panels">
+          {{ range $i, $t := .Tabs }}
+          <div class="panel{{ if eq $i 0 }} is-active{{ end }}" data-panel="{{ $i }}" data-key="{{ $t.Key }}">
+            {{ template "tabbody" $t }}
           </div>
-          {{ if .Forecast }}
-          <ul class="weather__days">
-            {{ range .Forecast }}
-            <li>
-              <span class="weather__day">{{ day .Date }}</span>
-              <span class="weather__dayicon">{{ wicon .Code }}</span>
-              <span class="weather__hl">{{ temp .High }}<span class="weather__lo">{{ temp .Low }}</span></span>
-            </li>
-            {{ end }}
-          </ul>
           {{ end }}
         </div>
-        {{ else }}
-        <ul class="items">
-          {{ range .Items }}
-          <li class="item">
-            {{ if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
-            <div class="item__body">
-              <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ .Title }}</a>
-              <div class="item__meta">
-                {{ if .Source }}<span class="item__source">{{ .Source }}</span>{{ end }}
-                {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
-                {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
-                {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
-                {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
-                <a class="item__read" href="/reader?url={{ .URL }}">read here</a>
-              </div>
-            </div>
-          </li>
-          {{ else }}
-          <li class="item item--empty">Nothing here yet.</li>
-          {{ end }}
-        </ul>
-        {{ end }}
       </section>
       {{ end }}
     </div>
@@ -84,3 +58,50 @@
   </main>
 </body>
 </html>
+
+{{ define "tabbody" }}
+  {{ with .Weather }}
+  <div class="weather">
+    <div class="weather__now">
+      <span class="weather__icon">{{ wicon .Code }}</span>
+      <span class="weather__temp">{{ temp .Current }}</span>
+      <span class="weather__desc">
+        {{ .Condition }}
+        <span class="weather__sub">feels {{ temp .FeelsLike }} · today {{ temp .Today.Low }} / {{ temp .Today.High }}</span>
+      </span>
+    </div>
+    {{ if .Forecast }}
+    <ul class="weather__days">
+      {{ range .Forecast }}
+      <li>
+        <span class="weather__day">{{ day .Date }}</span>
+        <span class="weather__dayicon">{{ wicon .Code }}</span>
+        <span class="weather__hl">{{ temp .High }}<span class="weather__lo">{{ temp .Low }}</span></span>
+      </li>
+      {{ end }}
+    </ul>
+    {{ end }}
+  </div>
+  {{ else }}
+  <ul class="items">
+    {{ range .Items }}
+    <li class="item">
+      {{ if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
+      <div class="item__body">
+        <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ .Title }}</a>
+        <div class="item__meta">
+          {{ if .Source }}<span class="item__source">{{ .Source }}</span>{{ end }}
+          {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
+          {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
+          {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
+          {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
+          <a class="item__read" href="/reader?url={{ .URL }}">read here</a>
+        </div>
+      </div>
+    </li>
+    {{ else }}
+    <li class="item item--empty">Nothing here yet.</li>
+    {{ end }}
+  </ul>
+  {{ end }}
+{{ end }}

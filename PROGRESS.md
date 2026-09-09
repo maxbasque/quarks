@@ -44,6 +44,30 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Layout v2 — viewport fit + tab groups (2026-09-08)
+
+Both from user feedback after M5.
+
+- **Viewport-fit layout**: the page no longer scrolls. `body` is a flex column at
+  `100dvh`; the grid fills the rest; each column can scroll; each card is
+  `flex: 1 1 0` and scrolls *inside itself*. Weather cards (and empty/offline
+  feeds) are content-sized instead (`:has()` selectors). Falls back to normal
+  document flow below 720px.
+- **Tab groups**: `type: group` (or `tabs`) in the config bundles several widgets
+  into one card with a tab bar. Each tab is still a normal widget instance (own
+  provider, schedule, cache, key) — the group is purely a layout grouping.
+  `config.Config` now exposes `[]Box` (was flat `[]WidgetConfig`); `web.Meta`
+  carries `[]Box{Column, Order, Title, Members}`. Active tab persists per card in
+  `localStorage`; the freshness/badge line follows the active tab.
+- **In-place refresh** now preserves each panel's scroll position (keyed by widget
+  key) and re-applies the active tab.
+- **Feed interleaving**: the `rss` provider gained `interleave: true` — with
+  several feeds it round-robins (newest from each, then next from each) instead of
+  merging into one date-sorted list, so a busy feed can't crowd the others out.
+  `youtube` sets it by default. Tested.
+
+---
+
 ## M5 — packaging (2026-09-08) — installed & verified on the Bazzite box
 
 - **`packaging/install.sh`** (`make install`), fully user-scoped, no root:

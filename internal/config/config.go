@@ -14,14 +14,29 @@ type Window struct {
 	Theme   string `yaml:"theme"`
 }
 
-type Config struct {
-	Window  Window
+// Box is one card on the dashboard. It holds one widget, or several shown as
+// tabs (config `type: group`).
+type Box struct {
+	Column  int
+	Title   string // optional label; for a tab group
 	Widgets []core.WidgetConfig
+}
+
+type Config struct {
+	Window Window
+	Boxes  []Box
 }
 
 type fileShape struct {
 	Window  Window      `yaml:"window"`
 	Widgets []yaml.Node `yaml:"widgets"`
+}
+
+type groupShape struct {
+	Type   string      `yaml:"type"`
+	Column int         `yaml:"column"`
+	Title  string      `yaml:"title"`
+	Tabs   []yaml.Node `yaml:"tabs"`
 }
 
 // Load reads and validates the config file at path.
@@ -51,18 +66,60 @@ func Load(path string) (*Config, error) {
 	}
 
 	for i, node := range fs.Widgets {
-		wc, err := core.ParseWidget(node)
+		box, err := parseBox(node)
 		if err != nil {
 			return nil, fmt.Errorf("widget %d: %w", i, err)
 		}
-		if wc.Type == "" {
-			return nil, fmt.Errorf("widget %d: missing type", i)
-		}
-		cfg.Widgets = append(cfg.Widgets, wc)
+		cfg.Boxes = append(cfg.Boxes, box)
 	}
 
-	if len(cfg.Widgets) == 0 {
+	if len(cfg.Boxes) == 0 {
 		return nil, fmt.Errorf("%s: no widgets configured", path)
 	}
 	return cfg, nil
+}
+
+func parseBox(node yaml.Node) (Box, error) {
+	var probe struct {
+		Type string `yaml:"type"`
+	}
+	if err := node.Decode(&probe); err != nil {
+		return Box{}, err
+	}
+
+	if probe.Type == "group" || probe.Type == "tabs" {
+		var g groupShape
+		if err := node.Decode(&g); err != nil {
+			return Box{}, err
+		}
+		if len(g.Tabs) == 0 {
+			return Box{}, fmt.Errorf("group %q: no tabs", g.Title)
+		}
+		column := g.Column
+		if column == 0 {
+			column = 1
+		}
+		box := Box{Column: column, Title: g.Title}
+		for j, tab := range g.Tabs {
+			wc, err := core.ParseWidget(tab)
+			if err != nil {
+				return Box{}, fmt.Errorf("tab %d: %w", j, err)
+			}
+			if wc.Type == "" {
+				return Box{}, fmt.Errorf("tab %d: missing type", j)
+			}
+			wc.Column = column // tabs share the group's column
+			box.Widgets = append(box.Widgets, wc)
+		}
+		return box, nil
+	}
+
+	wc, err := core.ParseWidget(node)
+	if err != nil {
+		return Box{}, err
+	}
+	if wc.Type == "" {
+		return Box{}, fmt.Errorf("missing type")
+	}
+	return Box{Column: wc.Column, Widgets: []core.WidgetConfig{wc}}, nil
 }

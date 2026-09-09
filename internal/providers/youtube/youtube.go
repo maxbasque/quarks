@@ -42,6 +42,7 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	}
 
 	// Empty source → the rss provider falls back to each feed's own title, i.e.
-	// the channel name, which is what you want per video in a multi-channel widget.
-	return rss.NewWithFeeds(feeds, ""), nil
+	// the channel name. interleave=true so a channel that uploads often doesn't
+	// crowd the others out of the list.
+	return rss.NewWithFeeds(feeds, "", true), nil
 }

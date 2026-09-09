@@ -120,3 +120,44 @@ func TestNoFeedsConfigured(t *testing.T) {
 		t.Error("expected an error when no feeds are configured")
 	}
 }
+
+func TestInterleaveBalancesBusyFeeds(t *testing.T) {
+	// feed A: 5 recent items; feed B: 1 old item.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/a.xml", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<rss version="2.0"><channel><title>A</title>`+
+			item("a1", "2026-09-08T12:00:00Z")+item("a2", "2026-09-08T11:00:00Z")+
+			item("a3", "2026-09-08T10:00:00Z")+item("a4", "2026-09-08T09:00:00Z")+
+			item("a5", "2026-09-08T08:00:00Z")+`</channel></rss>`)
+	})
+	mux.HandleFunc("/b.xml", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<rss version="2.0"><channel><title>B</title>`+
+			item("b1", "2026-09-01T00:00:00Z")+`</channel></rss>`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cfg := fmt.Sprintf("type: rss\ntitle: Mix\ninterleave: true\nfeeds: [%s/a.xml, %s/b.xml]\n", srv.URL, srv.URL)
+	items := fetch(t, cfg)
+
+	if len(items) != 6 {
+		t.Fatalf("want 6 items, got %d", len(items))
+	}
+	// round-robin: a1, b1, a2, a3, a4, a5 — B's single item is 2nd, not last.
+	if items[1].Title != "b1" {
+		t.Errorf("interleave order = %v; want b1 second", titles(items))
+	}
+}
+
+func item(title, pub string) string {
+	return fmt.Sprintf(`<item><title>%s</title><link>https://x/%s</link><guid>%s</guid><pubDate>%s</pubDate></item>`,
+		title, title, title, pub)
+}
+
+func titles(items []core.Item) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.Title
+	}
+	return out
+}

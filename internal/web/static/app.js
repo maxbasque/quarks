@@ -1,13 +1,14 @@
-// Progressive enhancement only. The dashboard renders and works with this file
-// absent — no ticking times, no in-place refresh, no inline reader (the "read
-// here" links still work as standalone pages).
+// Progressive enhancement only. Without this file the dashboard still renders;
+// it just won't tick times, switch tabs, refresh in place, or show the inline
+// reader (the "read here" links still open as standalone pages).
 (() => {
   "use strict";
 
-  // ---- theme toggle -------------------------------------------------------
   const root = document.documentElement;
-  const stored = localStorage.getItem("quarks-theme");
-  if (stored) root.dataset.theme = stored;
+
+  // ---- theme toggle -------------------------------------------------------
+  const storedTheme = localStorage.getItem("quarks-theme");
+  if (storedTheme) root.dataset.theme = storedTheme;
 
   const themeBtn = document.getElementById("theme-toggle");
   const paintTheme = () => { themeBtn.textContent = root.dataset.theme === "dark" ? "☀" : "☾"; };
@@ -34,9 +35,46 @@
   tickTimes();
   setInterval(tickTimes, 30000);
 
+  // ---- tabs ----------------------------------------------------------
+  const tabKey = (box) => "quarks-tab-" + box.dataset.box;
+
+  function activateTab(box, idx) {
+    const tabs = [...box.querySelectorAll(".box__tab")];
+    const panels = [...box.querySelectorAll(".panel")];
+    if (!tabs[idx]) idx = 0;
+    tabs.forEach((t, i) => t.classList.toggle("is-active", i === idx));
+    panels.forEach((p, i) => p.classList.toggle("is-active", i === idx));
+
+    const active = tabs[idx];
+    const status = box.querySelector(".box__status");
+    if (active && status) {
+      const badge = status.querySelector(".badge");
+      const fresh = status.querySelector(".fresh");
+      if (fresh) fresh.textContent = active.dataset.fresh || "";
+      if (badge) {
+        badge.textContent = active.dataset.badge || "";
+        badge.hidden = !active.dataset.badge;
+        badge.classList.toggle("badge--danger", active.dataset.danger === "1");
+      }
+    }
+    try { localStorage.setItem(tabKey(box), String(idx)); } catch (_) {}
+  }
+
+  function bindTabs(scope) {
+    scope.querySelectorAll(".box--tabbed").forEach((box) => {
+      let saved = 0;
+      try { saved = parseInt(localStorage.getItem(tabKey(box)) || "0", 10) || 0; } catch (_) {}
+      activateTab(box, saved);
+      box.querySelectorAll(".box__tab").forEach((tab, i) => {
+        tab.addEventListener("click", () => activateTab(box, i));
+      });
+    });
+  }
+  bindTabs(document);
+
   // ---- open external links in the OS default browser -----------------
-  // Only when running as a standalone app-window — in a normal browser tab the
-  // native behaviour (open in this browser) is what you want.
+  // Only when running as a standalone app-window — a normal browser tab should
+  // keep native behaviour.
   const standalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     window.navigator.standalone === true;
@@ -63,15 +101,14 @@
     const readLink = item.querySelector(".item__read");
     if (!readLink) return;
 
-    // a panel is stored as a sibling <li> right after the item
-    let panel = item.nextElementSibling;
-    if (panel && panel.classList.contains("reader-panel")) {
-      panel.remove();
+    const next = item.nextElementSibling;
+    if (next && next.classList.contains("reader-panel")) {
+      next.remove();
       openReaders--;
       return;
     }
 
-    panel = document.createElement("li");
+    const panel = document.createElement("li");
     panel.className = "reader-panel";
     panel.innerHTML = '<span class="reader-panel__loading">Extracting…</span>';
     item.after(panel);
@@ -95,19 +132,18 @@
     }
   });
 
-  // ---- keyboard nav -------------------------------------------------
+  // ---- keyboard nav (visible items only) ----------------------------
   let focused = -1;
-
-  const realItems = () => [...document.querySelectorAll(".item:not(.item--empty):not(.reader-panel)")];
+  const realItems = () =>
+    [...document.querySelectorAll(".panel.is-active .item:not(.item--empty)")];
 
   function setFocus(next) {
     const list = realItems();
     if (!list.length) return;
     if (focused >= 0 && list[focused]) list[focused].classList.remove("is-focused");
     focused = Math.max(0, Math.min(next, list.length - 1));
-    const el = list[focused];
-    el.classList.add("is-focused");
-    el.scrollIntoView({ block: "nearest" });
+    list[focused].classList.add("is-focused");
+    list[focused].scrollIntoView({ block: "nearest" });
   }
 
   document.addEventListener("keydown", (e) => {
@@ -117,31 +153,25 @@
 
     const list = realItems();
     switch (e.key) {
-      case "j":
-        e.preventDefault();
-        setFocus(focused < 0 ? 0 : focused + 1);
-        break;
-      case "k":
-        e.preventDefault();
-        setFocus(focused < 0 ? 0 : focused - 1);
-        break;
+      case "j": e.preventDefault(); setFocus(focused < 0 ? 0 : focused + 1); break;
+      case "k": e.preventDefault(); setFocus(focused < 0 ? 0 : focused - 1); break;
       case "Enter":
-        if (focused >= 0 && list[focused]) { e.preventDefault(); toggleReader(list[focused]); }
+        if (list[focused]) { e.preventDefault(); toggleReader(list[focused]); }
         break;
       case "o":
-        if (focused >= 0 && list[focused]) {
+        if (list[focused]) {
           const a = list[focused].querySelector(".item__link");
-          if (a) window.open(a.href, "_blank", "noopener");
+          if (a) a.click();
         }
         break;
       case "Escape":
-        document.querySelectorAll(".reader-panel").forEach((p) => { p.remove(); openReaders--; });
+        document.querySelectorAll(".reader-panel").forEach((p) => p.remove());
         openReaders = 0;
         break;
     }
   });
 
-  // ---- in-place refresh --------------------------------------------
+  // ---- in-place refresh (keeps scroll + active tab) -----------------
   let grid = document.querySelector(".grid");
   if (!grid) return;
   const secs = parseInt(grid.dataset.refresh || "0", 10);
@@ -155,15 +185,22 @@
 
   let refreshing = false;
   async function refresh() {
-    if (refreshing || openReaders > 0) return; // don't yank the page while reading
+    if (refreshing || openReaders > 0) return;
     refreshing = true;
     try {
+      const scrolls = {};
+      grid.querySelectorAll(".panel[data-key]").forEach((p) => { scrolls[p.dataset.key] = p.scrollTop; });
+
       const html = await (await fetch(location.pathname, { cache: "no-store" })).text();
       const next = new DOMParser().parseFromString(html, "text/html").querySelector(".grid");
       if (next) {
         grid.replaceWith(next);
         grid = next;
         focused = -1;
+        bindTabs(grid);
+        grid.querySelectorAll(".panel[data-key]").forEach((p) => {
+          if (scrolls[p.dataset.key] != null) p.scrollTop = scrolls[p.dataset.key];
+        });
         tickTimes();
         showSync();
       }

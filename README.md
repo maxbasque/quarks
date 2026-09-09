@@ -34,9 +34,13 @@ Flags: `--config <path>` (default `~/.config/quarks/config.yaml`), `--addr <host
 (extracted reader view), `o` opens the original, `Esc` closes reader panels.
 
 **Widget types:** `rss` (also covers YouTube channel feeds and the Reddit home
-feed via a secret URL), `hackernews`, `youtube`, `reddit`, `weather`. Secrets go
-in `~/.config/quarks/secrets.yaml` (`chmod 600`) and are referenced as
-`${secret:key}` — see `secrets.example.yaml`.
+feed via a secret URL), `hackernews`, `youtube`, `reddit`, `weather`. `type: group`
+bundles several into one card with tabs. Secrets go in
+`~/.config/quarks/secrets.yaml` (`chmod 600`), referenced as `${secret:key}` — see
+`secrets.example.yaml` and `config.example.yaml`.
+
+**Layout:** the dashboard fills the window — the page doesn't scroll, each card
+scrolls inside itself.
 
 ## Development
 

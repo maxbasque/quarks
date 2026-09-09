@@ -25,36 +25,35 @@ html[data-theme="dark"] {
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; }
+/* The dashboard fills the viewport: the page never scrolls, each card scrolls
+   inside itself. Below a narrow width it falls back to normal document flow. */
+html { height: 100%; }
 
 body {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 /* ---- top bar ---------------------------------------------------------- */
 
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
+  padding: 9px 18px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-.wordmark {
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
+.wordmark { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 .wordmark span { color: var(--accent); }
 
 .topbar__right { display: flex; align-items: center; gap: 12px; }
@@ -77,22 +76,39 @@ body {
 /* ---- grid ------------------------------------------------------------- */
 
 .grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(var(--cols, 3), 1fr);
-  gap: 18px;
-  max-width: 1680px;
-  margin: 0 auto;
-  padding: 22px 24px 48px;
+  gap: 14px;
+  padding: 14px;
 }
 
-.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 
 @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  body { height: auto; overflow: visible; }
+  .grid { grid-template-columns: 1fr; }
+  .col { overflow: visible; }
+  .box { min-height: 0; }
+}
 
-/* ---- widget --------------------------------------------------------- */
+/* ---- box (one card; may hold tabs) --------------------------------- */
 
-.widget {
+.box {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 220px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -100,28 +116,67 @@ body {
   overflow: hidden;
 }
 
-.widget--danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
-
-.widget__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 14px;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
+/* content-sized cards (weather, or an empty/offline feed) take only what they need */
+.box:has(.weather),
+.box:has(.panel.is-active > .items > .item--empty:only-child) {
+  flex: 0 0 auto;
+  min-height: 0;
 }
 
-.widget__head h2 {
-  margin: 0;
-  font-size: 12px;
+.box--danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+
+.box__head {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  padding-right: 12px;
+}
+
+.box__tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.box__tabs::-webkit-scrollbar { display: none; }
+
+.box__label {
+  align-self: center;
+  padding: 0 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text);
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
 }
 
-.widget__status { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.box__tab {
+  flex: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 11px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.box--tabbed .box__tab:hover { color: var(--text); }
+.box--tabbed .box__tab.is-active { color: var(--text); border-bottom-color: var(--accent); }
+.box:not(.box--tabbed) .box__tab { cursor: default; color: var(--text); }
+
+.box__status {
+  flex: none;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
 
 .fresh { font-size: 11px; color: var(--muted); }
 
@@ -134,6 +189,12 @@ body {
   padding: 1px 7px;
 }
 .badge--danger { color: var(--danger); border-color: currentColor; }
+
+.box__panels { flex: 1; min-height: 0; }
+.panel { height: 100%; overflow-y: auto; }
+.panel:not(.is-active) { display: none; }
+.box:has(.weather) .box__panels { flex: none; }
+.box:has(.weather) .panel { height: auto; }
 
 /* ---- items --------------------------------------------------------- */
 
