@@ -101,6 +101,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			if strings.EqualFold(items[i].Source, st.Title) {
 				items[i].Source = "" // redundant with the widget header
 			}
+			if strings.EqualFold(items[i].Author, items[i].Source) {
+				items[i].Author = "" // e.g. a YouTube channel is both
+			}
 		}
 
 		vm := widgetVM{Title: st.Title, Items: items, Weather: st.Weather, Fresh: freshLabel(st.LastOK)}

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -16,8 +17,10 @@ import (
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
 	"github.com/maxbasque/quarks/internal/providers/hackernews"
+	"github.com/maxbasque/quarks/internal/providers/reddit"
 	"github.com/maxbasque/quarks/internal/providers/rss"
 	"github.com/maxbasque/quarks/internal/providers/weather"
+	"github.com/maxbasque/quarks/internal/providers/youtube"
 	"github.com/maxbasque/quarks/internal/web"
 )
 
@@ -55,6 +58,8 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("rss", rss.New)
 	reg.Register("hackernews", hackernews.New)
 	reg.Register("weather", weather.New)
+	reg.Register("reddit", reddit.New)
+	reg.Register("youtube", youtube.New)
 
 	return &App{cfgPath: cfgPath, log: log, registry: reg, store: store, srv: srv}, nil
 }
@@ -65,9 +70,7 @@ func (a *App) Run(ctx context.Context, addr string) error {
 	if err := a.reload(ctx); err != nil {
 		return fmt.Errorf("initial config: %w", err)
 	}
-	if fi, err := os.Stat(a.cfgPath); err == nil {
-		a.lastMod = fi.ModTime()
-	}
+	a.lastMod = a.watchStamp()
 	go a.watch(ctx)
 
 	httpSrv := &http.Server{Addr: addr, Handler: a.srv.Routes()}
@@ -85,8 +88,8 @@ func (a *App) Run(ctx context.Context, addr string) error {
 	return nil
 }
 
-// watch polls the config file's mtime and reloads on change. A reload that fails
-// to parse is logged and the previous generation keeps running.
+// watch polls the config and secrets files' mtimes and reloads on change. A
+// reload that fails to parse is logged and the previous generation keeps running.
 func (a *App) watch(ctx context.Context) {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
@@ -95,17 +98,31 @@ func (a *App) watch(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			fi, err := os.Stat(a.cfgPath)
-			if err != nil || fi.ModTime().Equal(a.lastMod) {
+			mod := a.watchStamp()
+			if mod == a.lastMod || mod.IsZero() {
 				continue
 			}
-			a.lastMod = fi.ModTime()
+			a.lastMod = mod
 			a.log.Info("config changed, reloading", "path", a.cfgPath)
 			if err := a.reload(ctx); err != nil {
 				a.log.Error("reload failed, keeping previous config", "err", err)
 			}
 		}
 	}
+}
+
+// watchStamp is the newest mtime across the config file and the secrets file
+// beside it. Zero if the config file is unreadable.
+func (a *App) watchStamp() time.Time {
+	fi, err := os.Stat(a.cfgPath)
+	if err != nil {
+		return time.Time{}
+	}
+	newest := fi.ModTime()
+	if si, err := os.Stat(filepath.Join(filepath.Dir(a.cfgPath), "secrets.yaml")); err == nil && si.ModTime().After(newest) {
+		newest = si.ModTime()
+	}
+	return newest
 }
 
 func (a *App) reload(ctx context.Context) error {

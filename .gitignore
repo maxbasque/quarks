@@ -2,3 +2,8 @@
 /fakefeed
 /dist/
 *.tmp
+
+# never commit real secrets or local configs
+secrets.yaml
+/config.yaml
+/config.local.yaml

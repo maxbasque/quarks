@@ -46,6 +46,14 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	return &Provider{feeds: s.Feeds, source: source, parser: p}, nil
 }
 
+// NewWithFeeds builds an rss provider directly, for other providers that are
+// really just RSS with a nicer config surface (e.g. youtube).
+func NewWithFeeds(feeds []string, source string) core.Provider {
+	p := gofeed.NewParser()
+	p.UserAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
+	return &Provider{feeds: feeds, source: source, parser: p}
+}
+
 func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	var items []core.Item
 	var firstErr error

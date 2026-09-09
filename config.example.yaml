@@ -20,13 +20,32 @@ widgets:
     feeds:
       - https://ici.radio-canada.ca/rss/4159
 
+  # Your personalized Reddit home feed — a secret RSS URL from
+  # reddit.com/prefs/feeds/. Put the URL in secrets.yaml, not here.
   - type: rss
+    column: 2
+    title: Reddit
+    ttl: 20m
+    limit: 15
+    feeds:
+      - "${secret:reddit_home}"
+
+  # Public subreddits (carries scores + comment counts). Note: the reddit .json
+  # endpoint is often blocked outside a residential IP.
+  # - type: reddit
+  #   column: 2
+  #   title: r/selfhosted
+  #   ttl: 20m
+  #   subreddits: [selfhosted, bazzite]
+  #   sort: hot
+
+  - type: youtube
     column: 2
     title: YouTube
     ttl: 30m
     limit: 12
-    feeds:
-      - https://www.youtube.com/feeds/videos.xml?channel_id=UCXXXXXXXXXXXXXXXXXXXXXX
+    channels:
+      - UCXXXXXXXXXXXXXXXXXXXXXX   # channel IDs (start with "UC")
 
   - type: weather
     column: 3

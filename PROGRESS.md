@@ -16,7 +16,7 @@ for the app-window; launchers must call `flatpak run com.google.Chrome --app=…
 |---|---|---|
 | M0 | Skeleton: config → registry → scheduler → store → web, one hardcoded feed | **✅ done (2026-09-08)** — HN frontpage rendering in browser |
 | M1 | It looks good: multi-column, cards, thumbnails, dark theme, auto-refresh, stale badges, YAML hot-reload | **✅ done (2026-09-08)** |
-| M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | **in progress** — HN + weather done; secrets file / Reddit / YouTube next |
+| M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | **✅ done (2026-09-08)** |
 | M3 | Reader view: inline article extraction, keyboard nav (j/k, Enter, o) | not started |
 | M4 | Calendar: ICS subscription, agenda widget | not started |
 | M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **partial** — files written + `make install`; app-window WM_CLASS not yet verified on a live window |
@@ -41,6 +41,28 @@ What works, verified on the Bazzite box 2026-09-08:
   links open in a new tab, freshness badge (`stale · Nm` / `offline`), meta-refresh 60s.
 - Confirmed: real Hacker News front-page headlines render; snapshot file written;
   `stale`/`offline` badge logic exercised via the fetch-cancelled path.
+
+---
+
+## M2 (part 2) — secrets, Reddit, YouTube (2026-09-08)
+
+- **Secrets + substitution** (`internal/config/secrets.go`): `${VAR}` (environment)
+  and `${secret:key}` (from `secrets.yaml` beside the config) are expanded in the raw
+  config bytes before YAML parsing, so a token works anywhere. `secrets.yaml` must be
+  mode 0600 or Load refuses it. A missing secrets file is fine; unresolved tokens
+  become empty and are logged. The config watcher now also watches `secrets.yaml`.
+  `.gitignore` blocks `secrets.yaml` and `config.yaml`; `secrets.example.yaml` added.
+- **`internal/providers/reddit`** — public subreddit listings via `r/<subs>/<sort>.json`
+  (scores + comments). Detects an HTML/blocked response and returns a clear error
+  pointing at the private-RSS path. **The `.json` endpoint 403s outside a residential
+  IP** — confirmed from this dev environment; expected to work on the Bazzite box.
+- **Reddit home feed** needs *no new code* — it's a secret RSS URL through the generic
+  `rss` provider: `feeds: [ "${secret:reddit_home}" ]`.
+- **`internal/providers/youtube`** — thin wrapper over `rss`: `channels: [UC…]` →
+  per-channel Atom feed URLs. `rss.NewWithFeeds` added for this reuse. Empty source →
+  items get the channel name. Verified live (Fireship, Veritasium) with thumbnails.
+- Tests for reddit, youtube, and config secret/env substitution + the 0600 check.
+- Web: suppress an item's Author when it equals its Source (YouTube sets both).
 
 ---
 
@@ -113,22 +135,29 @@ run `xprop WM_CLASS` on it and fix `quarks.desktop` if the taskbar icon is gener
 
 ```
 cmd/quarks/main.go              flags, signal handling → app.Run
-internal/app/app.go             wiring + config hot-reload (generations)
-internal/config/config.go       YAML load + validate + defaults
+cmd/fakefeed/main.go            dev-only fake feed server
+internal/app/app.go             wiring, provider registry, config hot-reload
+internal/config/
+  config.go                     YAML load + validate + defaults
+  secrets.go                    ${VAR} / ${secret:key} expansion, 0600 check
 internal/core/
   item.go                       normalized Item
-  provider.go                   Provider interface, WidgetConfig, ParseWidget
+  weather.go                    Weather / WeatherDay + WMO code labels
+  provider.go                   Provider iface, Payload{Items,Weather}, WidgetConfig
   registry.go                   type name → Factory
   scheduler.go                  per-widget fetch loops, WaitGroup drain
   store.go                      in-memory + on-disk snapshot, reload-safe
-internal/providers/rss/
-  rss.go                        generic feed provider (gofeed)
-  rss_test.go + testdata/       offline fixture tests
-cmd/fakefeed/main.go            dev-only fake feed server
-config.fake.yaml                UI-dev config pointing at fakefeed
+internal/providers/             (each: <name>.go + <name>_test.go)
+  rss/       generic feed provider (gofeed) + testdata/*.xml
+  hackernews/  Algolia search API
+  weather/     Open-Meteo
+  reddit/      r/<subs>.json  (fragile — residential IP)
+  youtube/     channels → per-channel Atom, wraps rss
 internal/web/
   web.go                        handlers, view models, Meta (published on reload)
   templates/index.html          html/template dashboard
+config.fake.yaml                UI-dev config pointing at fakefeed
+config.example.yaml, secrets.example.yaml
   static/{style.css,app.js,favicon.svg}
 packaging/{quarks.service,quarks.desktop,install.sh}
 config.example.yaml
@@ -149,19 +178,17 @@ config.example.yaml
 
 ## Next session — start here
 
-**M2 — the feeds.** In rough order:
-1. **Hacker News via Algolia** (`hn.algolia.com/api/v1/search?tags=front_page`) — a
-   dedicated provider so items carry Score + Comments + CommentsURL. Keep the hnrss
-   feed working via the generic rss provider as the fallback.
-2. **Open-Meteo weather** — its own small type + renderer (not an Item), config
-   `latitude`/`longitude`.
-3. **Secrets file** — `~/.config/quarks/secrets.yaml` (0600) + `${VAR}` / `${secret:...}`
-   substitution in config values. Needed before Reddit/calendar.
-4. **Reddit** — private home-feed RSS through the generic rss provider (secret URL from
-   the secrets file); public `r/<sub>.json` provider for specific subreddits with a real
-   User-Agent.
-5. **YouTube** — per-channel RSS (`youtube.com/feeds/videos.xml?channel_id=…`), channel
-   IDs from config. (Needs answers to §14 Q3/Q4.)
+**M3 — reader view.** Inline article expansion with extracted text
+(`go-shiori/go-readability`), fetched lazily on click, never during polling.
+Keyboard nav: `j`/`k` move, `Enter`/`o` open, `Esc` collapse. This needs a small
+client-side interaction layer and a `/reader?url=` endpoint.
 
-Also outstanding: verify Radio-Canada feed URLs (§14 Q2); confirm the Chrome `--app=`
-window WM_CLASS on the Bazzite box.
+Before or alongside, quick wins with real value:
+- Point a real config at the Bazzite box and see if `type: reddit` works there
+  (it 403s from the dev environment).
+- Verify Radio-Canada feed URLs (§14 Q2) — still placeholders.
+- Confirm the Chrome `--app=` window WM_CLASS.
+
+Still needed from the user for a personalized dashboard (not blockers): real
+subreddit list, YouTube channel IDs, RC sections, the Reddit home-feed secret URL,
+which calendar for M4.

@@ -31,6 +31,12 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	secrets, err := loadSecrets(secretsPath(path))
+	if err != nil {
+		return nil, err
+	}
+	data = expandTokens(data, secrets)
+
 	var fs fileShape
 	if err := yaml.Unmarshal(data, &fs); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
