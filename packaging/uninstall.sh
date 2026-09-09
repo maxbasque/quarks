@@ -22,6 +22,8 @@ rm -f "$icon_dir/scalable/apps/quarks.svg" \
       "$icon_dir/192x192/apps/quarks.png" \
       "$icon_dir/512x512/apps/quarks.png"
 update-desktop-database "$app_dir" >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t "$icon_dir" >/dev/null 2>&1 || true
+kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
 
 echo "Removed binary, helper, service and launcher."
 

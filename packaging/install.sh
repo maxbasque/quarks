@@ -30,12 +30,22 @@ install -m 755 "$repo/packaging/quarks-open" "$bin_dir/quarks-open"
 
 echo "==> installing launcher + icons"
 mkdir -p "$app_dir" "$icon_dir/scalable/apps" "$icon_dir/192x192/apps" "$icon_dir/512x512/apps"
-install -m 644 "$repo/packaging/quarks.desktop"          "$app_dir/quarks.desktop"
 install -m 644 "$repo/internal/web/static/favicon.svg"   "$icon_dir/scalable/apps/quarks.svg"
 install -m 644 "$repo/internal/web/static/icon-192.png"  "$icon_dir/192x192/apps/quarks.png"
 install -m 644 "$repo/internal/web/static/icon-512.png"  "$icon_dir/512x512/apps/quarks.png"
+
+# a user-local icon theme dir needs its own index.theme or some loaders skip it
+[ -f "$icon_dir/index.theme" ] || cp -f /usr/share/icons/hicolor/index.theme "$icon_dir/index.theme" 2>/dev/null || \
+  printf '[Icon Theme]\nName=Hicolor\nDirectories=scalable/apps,192x192/apps,512x512/apps\n\n[scalable/apps]\nSize=48\nType=Scalable\nMinSize=8\nMaxSize=512\nContext=Applications\n\n[192x192/apps]\nSize=192\nContext=Applications\n\n[512x512/apps]\nSize=512\nContext=Applications\n' > "$icon_dir/index.theme"
+
+# Install the launcher, then pin Icon= to an absolute path so it resolves even
+# before icon caches refresh.
+install -m 644 "$repo/packaging/quarks.desktop" "$app_dir/quarks.desktop"
+sed -i "s|^Icon=quarks$|Icon=$icon_dir/scalable/apps/quarks.svg|" "$app_dir/quarks.desktop"
+
 update-desktop-database "$app_dir" >/dev/null 2>&1 || true
-gtk-update-icon-cache "$icon_dir" >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t "$icon_dir" >/dev/null 2>&1 || true
+kbuildsycoca6 >/dev/null 2>&1 || kbuildsycoca5 >/dev/null 2>&1 || true
 
 echo "==> installing systemd --user service"
 mkdir -p "$unit_dir"
