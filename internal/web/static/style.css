@@ -183,3 +183,48 @@ body {
 
 .item__comments { color: var(--muted); text-decoration: none; }
 .item__comments:hover { color: var(--accent); }
+
+/* ---- weather ------------------------------------------------------- */
+
+.weather { padding: 14px; }
+
+.weather__now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weather__icon { font-size: 34px; line-height: 1; }
+
+.weather__temp {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather__desc { display: flex; flex-direction: column; font-weight: 600; }
+.weather__sub { font-weight: 400; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.weather__days {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.weather__days li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  flex: 1;
+}
+
+.weather__day { color: var(--muted); }
+.weather__dayicon { font-size: 17px; }
+.weather__hl { font-variant-numeric: tabular-nums; font-weight: 600; }
+.weather__lo { color: var(--muted); font-weight: 400; margin-left: 4px; }

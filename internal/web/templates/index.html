@@ -29,6 +29,29 @@
             <span class="fresh">{{ .Fresh }}</span>
           </div>
         </header>
+        {{ with .Weather }}
+        <div class="weather">
+          <div class="weather__now">
+            <span class="weather__icon">{{ wicon .Code }}</span>
+            <span class="weather__temp">{{ temp .Current }}</span>
+            <span class="weather__desc">
+              {{ .Condition }}
+              <span class="weather__sub">feels {{ temp .FeelsLike }} · today {{ temp .Today.Low }} / {{ temp .Today.High }}</span>
+            </span>
+          </div>
+          {{ if .Forecast }}
+          <ul class="weather__days">
+            {{ range .Forecast }}
+            <li>
+              <span class="weather__day">{{ day .Date }}</span>
+              <span class="weather__dayicon">{{ wicon .Code }}</span>
+              <span class="weather__hl">{{ temp .High }}<span class="weather__lo">{{ temp .Low }}</span></span>
+            </li>
+            {{ end }}
+          </ul>
+          {{ end }}
+        </div>
+        {{ else }}
         <ul class="items">
           {{ range .Items }}
           <li class="item">
@@ -48,6 +71,7 @@
           <li class="item item--empty">Nothing here yet.</li>
           {{ end }}
         </ul>
+        {{ end }}
       </section>
       {{ end }}
     </div>

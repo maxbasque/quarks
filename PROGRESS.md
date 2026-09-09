@@ -16,7 +16,7 @@ for the app-window; launchers must call `flatpak run com.google.Chrome --app=…
 |---|---|---|
 | M0 | Skeleton: config → registry → scheduler → store → web, one hardcoded feed | **✅ done (2026-09-08)** — HN frontpage rendering in browser |
 | M1 | It looks good: multi-column, cards, thumbnails, dark theme, auto-refresh, stale badges, YAML hot-reload | **✅ done (2026-09-08)** |
-| M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | not started |
+| M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | **in progress** — HN + weather done; secrets file / Reddit / YouTube next |
 | M3 | Reader view: inline article extraction, keyboard nav (j/k, Enter, o) | not started |
 | M4 | Calendar: ICS subscription, agenda widget | not started |
 | M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **partial** — files written + `make install`; app-window WM_CLASS not yet verified on a live window |
@@ -41,6 +41,30 @@ What works, verified on the Bazzite box 2026-09-08:
   links open in a new tab, freshness badge (`stale · Nm` / `offline`), meta-refresh 60s.
 - Confirmed: real Hacker News front-page headlines render; snapshot file written;
   `stale`/`offline` badge logic exercised via the fetch-cancelled path.
+
+---
+
+## M2 (part 1) — Hacker News + weather (2026-09-08)
+
+- **Provider contract generalized:** `Provider.Fetch` now returns `core.Payload`
+  (`{ Items []Item; Weather *Weather }`) instead of `[]Item`. Feed providers use
+  `core.Feed(items)`; the widgets that don't fit the Item shape (weather now,
+  calendar later) fill their own field. Store/scheduler/web updated; snapshot JSON
+  now carries `weather`.
+- **`internal/providers/hackernews`** — Algolia search API
+  (`hn.algolia.com/api/v1/search`). One request → points + comment counts +
+  discussion URL, which hnrss doesn't give. Config: `tags` (default `front_page`),
+  `query`. Ask/Show HN text posts link to the HN item.
+- **`internal/providers/weather`** — Open-Meteo (`api.open-meteo.com/v1/forecast`),
+  keyless. Config: `latitude`, `longitude`, `location`, `forecast_days` (default 4).
+  Current temp + feels-like + WMO condition + today's high/low + N-day forecast.
+  Rendered as its own card (emoji icons, forecast strip), not a feed list.
+- Tests for both providers against canned responses via `httptest`.
+- `config.fake.yaml` now includes both (they hit real keyless APIs); example config
+  updated.
+
+Known rough edge: widget keys strip non-ASCII (`Montréal` → `montr-al`). Internal
+only (cache filename), never shown. Fix when it matters.
 
 ---
 

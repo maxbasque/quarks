@@ -15,7 +15,9 @@ import (
 
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/providers/hackernews"
 	"github.com/maxbasque/quarks/internal/providers/rss"
+	"github.com/maxbasque/quarks/internal/providers/weather"
 	"github.com/maxbasque/quarks/internal/web"
 )
 
@@ -51,6 +53,8 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 
 	reg := core.NewRegistry()
 	reg.Register("rss", rss.New)
+	reg.Register("hackernews", hackernews.New)
+	reg.Register("weather", weather.New)
 
 	return &App{cfgPath: cfgPath, log: log, registry: reg, store: store, srv: srv}, nil
 }

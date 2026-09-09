@@ -3,20 +3,35 @@ window:
   theme: dark
 
 widgets:
-  - type: rss
+  - type: hackernews
     column: 1
     title: Hacker News
-    source: Hacker News
-    ttl: 20m
+    ttl: 15m
     limit: 15
-    feeds:
-      - https://hnrss.org/frontpage
+    # tags: front_page      # or "ask_hn", "show_hn", "story"
+    # query: rust           # optional search term
 
-  # M1+: verify the real Radio-Canada feed URLs (plan §14 Q2) before enabling.
-  # - type: rss
-  #   column: 1
-  #   title: Radio-Canada
-  #   ttl: 15m
-  #   limit: 12
-  #   feeds:
-  #     - https://ici.radio-canada.ca/rss/XXXX
+  - type: rss
+    column: 1
+    title: Radio-Canada
+    ttl: 15m
+    limit: 12
+    # Verify the current feed URLs against the live site before relying on these.
+    feeds:
+      - https://ici.radio-canada.ca/rss/4159
+
+  - type: rss
+    column: 2
+    title: YouTube
+    ttl: 30m
+    limit: 12
+    feeds:
+      - https://www.youtube.com/feeds/videos.xml?channel_id=UCXXXXXXXXXXXXXXXXXXXXXX
+
+  - type: weather
+    column: 3
+    title: Montréal
+    ttl: 30m
+    latitude: 45.50
+    longitude: -73.57
+    forecast_days: 4

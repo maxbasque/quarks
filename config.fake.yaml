@@ -1,16 +1,26 @@
-# UI-development config: points every widget at the local fakefeed server.
-#   Terminal 1:  go run ./cmd/fakefeed
-#   Terminal 2:  go run ./cmd/quarks --config config.fake.yaml
+# UI-development config.
+#   Terminal 1:  make fakefeed
+#   Terminal 2:  make dev
+#   Terminal 3:  make open
+#
+# The rss widgets point at the local fakefeed server. The hackernews and weather
+# widgets hit their real APIs (both keyless) so you can see live data too.
 window:
   columns: 3
   theme: dark
 
 widgets:
+  - type: hackernews
+    column: 1
+    title: Hacker News
+    ttl: 15m
+    limit: 12
+
   - type: rss
     column: 1
     title: Fake News
     ttl: 5m
-    limit: 15
+    limit: 12
     feeds: [ http://127.0.0.1:7400/news.xml ]
 
   - type: rss
@@ -20,9 +30,16 @@ widgets:
     limit: 12
     feeds: [ http://127.0.0.1:7400/youtube.xml ]
 
+  - type: weather
+    column: 3
+    title: Montréal
+    ttl: 30m
+    latitude: 45.50
+    longitude: -73.57
+
   - type: rss
     column: 3
     title: Fake Reddit
     ttl: 5m
-    limit: 10
+    limit: 8
     feeds: [ http://127.0.0.1:7400/reddit.xml ]

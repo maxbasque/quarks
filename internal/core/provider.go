@@ -11,8 +11,19 @@ import (
 // Credentials never appear here: a secret URL and an OAuth token are both just
 // "something this provider was configured with".
 type Provider interface {
-	Fetch(ctx context.Context) ([]Item, error)
+	Fetch(ctx context.Context) (Payload, error)
 }
+
+// Payload is what one fetch produces. Feed widgets fill Items; the handful of
+// widgets that don't fit the Item shape (weather now, calendar later) fill their
+// own field. Exactly one field is populated.
+type Payload struct {
+	Items   []Item
+	Weather *Weather
+}
+
+// Feed is a convenience for the common case.
+func Feed(items []Item) Payload { return Payload{Items: items} }
 
 // Factory builds a Provider from its widget config.
 type Factory func(cfg WidgetConfig) (Provider, error)

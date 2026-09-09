@@ -17,7 +17,8 @@ type WidgetState struct {
 	Order   int       `json:"order"`    // position in the config, for stable UI ordering
 	Column  int       `json:"column"`   //
 	Type    string    `json:"type"`     //
-	Items   []Item    `json:"items"`    //
+	Items   []Item    `json:"items"`    // feed widgets
+	Weather *Weather  `json:"weather"`  // weather widgets
 	LastOK  time.Time `json:"last_ok"`  // zero until a fetch succeeds
 	LastErr string    `json:"last_err"` // last fetch error, "" if last fetch was ok
 	LastTry time.Time `json:"last_try"` //
@@ -80,8 +81,8 @@ func (s *Store) Retain(keep map[string]bool) {
 	}
 }
 
-// SetItems records a successful fetch and writes the snapshot.
-func (s *Store) SetItems(key string, items []Item) {
+// SetPayload records a successful fetch and writes the snapshot.
+func (s *Store) SetPayload(key string, p Payload) {
 	s.mu.Lock()
 	st := s.states[key]
 	if st == nil {
@@ -89,7 +90,8 @@ func (s *Store) SetItems(key string, items []Item) {
 		return
 	}
 	now := time.Now()
-	st.Items = items
+	st.Items = p.Items
+	st.Weather = p.Weather
 	st.LastOK = now
 	st.LastTry = now
 	st.LastErr = ""

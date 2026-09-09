@@ -3,6 +3,7 @@ package web
 import (
 	"embed"
 	"html/template"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -33,7 +34,10 @@ type Server struct {
 
 func NewServer(store *core.Store) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"ago": ago,
+		"ago":   ago,
+		"temp":  temp,
+		"wicon": weatherIcon,
+		"day":   func(t time.Time) string { return t.Format("Mon") },
 	}).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -57,11 +61,12 @@ func (s *Server) Routes() *http.ServeMux {
 }
 
 type widgetVM struct {
-	Title  string
-	Items  []core.Item
-	Badge  string // "", "stale · 14m", "offline"
-	Fresh  string // "updated 3m ago" / "never"
-	Danger bool
+	Title   string
+	Items   []core.Item
+	Weather *core.Weather
+	Badge   string // "", "stale · 14m", "offline"
+	Fresh   string // "updated 3m ago" / "never"
+	Danger  bool
 }
 
 type pageVM struct {
@@ -98,10 +103,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		vm := widgetVM{Title: st.Title, Items: items, Fresh: freshLabel(st.LastOK)}
+		vm := widgetVM{Title: st.Title, Items: items, Weather: st.Weather, Fresh: freshLabel(st.LastOK)}
 		ttl := meta.TTLs[st.Key]
 		switch {
-		case len(st.Items) == 0 && st.LastErr != "":
+		case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
 			vm.Badge, vm.Danger = "offline", true
 		case st.LastErr != "":
 			vm.Badge = "stale · " + compactSince(st.LastOK)
@@ -143,6 +148,39 @@ func ago(t time.Time) string {
 		return "just now"
 	}
 	return compactSince(t) + " ago"
+}
+
+// temp rounds a Celsius value to a whole-degree string like "15°".
+func temp(c float64) string {
+	return strconv.Itoa(int(math.Round(c))) + "°"
+}
+
+// weatherIcon maps a WMO code to an emoji.
+func weatherIcon(code int) string {
+	switch {
+	case code == 0:
+		return "☀️"
+	case code <= 2:
+		return "🌤️"
+	case code == 3:
+		return "☁️"
+	case code >= 45 && code <= 48:
+		return "🌫️"
+	case code >= 51 && code <= 57:
+		return "🌦️"
+	case code >= 61 && code <= 67:
+		return "🌧️"
+	case code >= 71 && code <= 77:
+		return "🌨️"
+	case code >= 80 && code <= 82:
+		return "🌧️"
+	case code >= 85 && code <= 86:
+		return "🌨️"
+	case code >= 95:
+		return "⛈️"
+	default:
+		return "•"
+	}
 }
 
 // compactSince is a short "3m" / "5h" / "2d" duration.

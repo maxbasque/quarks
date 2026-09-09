@@ -34,11 +34,11 @@ func fetch(t *testing.T, cfgSrc string) []core.Item {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	items, err := p.Fetch(context.Background())
+	payload, err := p.Fetch(context.Background())
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	return items
+	return payload.Items
 }
 
 func TestYouTubeFeed(t *testing.T) {

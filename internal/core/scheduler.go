@@ -68,7 +68,7 @@ func (s *Scheduler) fetch(ctx context.Context, j job) {
 	fctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	items, err := j.provider.Fetch(fctx)
+	payload, err := j.provider.Fetch(fctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return // shutting down or reloading — not a real feed failure
@@ -77,9 +77,9 @@ func (s *Scheduler) fetch(ctx context.Context, j job) {
 		s.store.SetError(j.key, err)
 		return
 	}
-	if j.limit > 0 && len(items) > j.limit {
-		items = items[:j.limit]
+	if j.limit > 0 && len(payload.Items) > j.limit {
+		payload.Items = payload.Items[:j.limit]
 	}
-	s.log.Info("widget refreshed", "widget", j.key, "items", len(items))
-	s.store.SetItems(j.key, items)
+	s.log.Info("widget refreshed", "widget", j.key, "items", len(payload.Items))
+	s.store.SetPayload(j.key, payload)
 }

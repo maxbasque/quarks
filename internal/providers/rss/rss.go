@@ -46,7 +46,7 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	return &Provider{feeds: s.Feeds, source: source, parser: p}, nil
 }
 
-func (p *Provider) Fetch(ctx context.Context) ([]core.Item, error) {
+func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	var items []core.Item
 	var firstErr error
 
@@ -69,13 +69,13 @@ func (p *Provider) Fetch(ctx context.Context) ([]core.Item, error) {
 
 	// If every feed failed, surface the error. A partial success is returned.
 	if items == nil && firstErr != nil {
-		return nil, firstErr
+		return core.Payload{}, firstErr
 	}
 
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].PublishedAt.After(items[j].PublishedAt)
 	})
-	return items, nil
+	return core.Feed(items), nil
 }
 
 func toItem(e *gofeed.Item, source string) core.Item {
