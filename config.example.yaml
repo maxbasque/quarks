@@ -16,9 +16,9 @@ widgets:
     title: Radio-Canada
     ttl: 15m
     limit: 12
-    # Verify the current feed URLs against the live site before relying on these.
     feeds:
-      - https://ici.radio-canada.ca/rss/4159
+      # "à la une" (front page). Pattern: ici.radio-canada.ca/info/rss/info/<section>
+      - https://ici.radio-canada.ca/info/rss/info/a-la-une
 
   # Your personalized Reddit home feed — a secret RSS URL from
   # reddit.com/prefs/feeds/. Put the URL in secrets.yaml, not here.

@@ -236,12 +236,17 @@ M0–M3 + M5 are done. The dashboard is installed and running on the Bazzite box
 **M4 (calendar) is skipped for now** by request; **M6 (OAuth for YouTube subs) is
 still deferred** per the plan.
 
-Remaining work is mostly personalization + polish:
-- Replace the seeded `~/.config/quarks/config.yaml` (still the M0 one — just HN
-  via hnrss) with real feeds: HN via `type: hackernews`, weather, real subreddits,
-  YouTube channel IDs, verified Radio-Canada URLs (§14 Q2), the Reddit home-feed
-  secret URL in `secrets.yaml`.
-- Check `type: reddit` works from the residential IP (403s from the dev env).
+On the box, `~/.config/quarks/config.yaml` now has 5 real widgets (HN, Radio-Canada,
+Reddit, YouTube×2, weather) — this file is local, not in the repo.
+
+- **Radio-Canada** (§14 Q2, partly resolved): `https://ici.radio-canada.ca/info/rss/info/a-la-une`
+  works. Pattern is `…/info/rss/info/<section>` but only `a-la-une` responded of the
+  sections tried — the section list still needs digging.
+- **Reddit `type: reddit` 403s from this box too** — not just the dev env. So the
+  private-RSS home-feed path (a `${secret:reddit_home}` URL through `type: rss`) is
+  the one to use here. Needs the user's secret URL from reddit.com/prefs/feeds/.
+- YouTube: with two channels of different posting frequency, the busier one
+  dominates the (date-sorted) list — possible future tweak (round-robin / per-channel cap).
 - Whatever annoys you in daily use — that's the M1–M5 review the plan's M7 calls
   for (Wails native shell / Bubble Tea TUI are both optional).
 
