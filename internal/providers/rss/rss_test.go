@@ -115,6 +115,25 @@ func TestErrorWhenAllFeedsFail(t *testing.T) {
 	}
 }
 
+func TestMediaContentThumbnail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0"?>
+		<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>N</title>
+		  <item>
+		    <title>Story</title><link>https://news.example/s</link><guid>s</guid>
+		    <pubDate>Wed, 09 Sep 2026 02:00:00 -0400</pubDate>
+		    <media:content url="https://news.example/img.jpg" type="image/jpeg"/>
+		  </item>
+		</channel></rss>`)
+	}))
+	defer srv.Close()
+
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: N\nfeeds: [%s]\n", srv.URL))
+	if len(items) != 1 || items[0].Thumbnail != "https://news.example/img.jpg" {
+		t.Errorf("media:content thumbnail not picked up: %+v", items)
+	}
+}
+
 func TestRedditHomeFeedShowsSubreddit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
