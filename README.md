@@ -35,8 +35,12 @@ Flags: `--config <path>` (default `~/.config/quarks/config.yaml`), `--addr <host
 ```bash
 make test          # offline — providers run against recorded fixtures
 make fakefeed      # terminal 1: fake YouTube / news / Reddit feeds on :7400
-make dev           # terminal 2: quarks against config.fake.yaml
+make dev           # terminal 2: quarks against config.fake.yaml (server only)
+make open          # terminal 3: open the dashboard in a Chrome app-window
 ```
+
+`make dev` starts only the server — nothing appears until you open
+`http://localhost:7373` (via `make open`, or any browser tab).
 
 `make install` sets it up for the current user: binary in `~/.local/bin`, a systemd
 `--user` service for the server, and a `.desktop` entry for the Chrome app-window.
