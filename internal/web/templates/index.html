@@ -4,32 +4,48 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quark's</title>
+  <link rel="icon" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/style.css">
-  <meta http-equiv="refresh" content="60">
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <main class="grid" style="--cols: {{ len .Columns }}">
+  <header class="topbar">
+    <div class="wordmark">Quark<span>'s</span></div>
+    <div class="topbar__right">
+      <span class="tick" id="lastsync" hidden></span>
+      <button class="iconbtn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+
+  <main class="grid" style="--cols: {{ len .Columns }}" data-refresh="60">
     {{ range .Columns }}
     <div class="col">
       {{ range . }}
-      <section class="widget">
+      <section class="widget{{ if .Danger }} widget--danger{{ end }}">
         <header class="widget__head">
           <h2>{{ .Title }}</h2>
-          {{ if .Badge }}<span class="badge{{ if .Danger }} badge--danger{{ end }}">{{ .Badge }}</span>{{ end }}
+          <div class="widget__status">
+            {{ if .Badge }}<span class="badge{{ if .Danger }} badge--danger{{ end }}">{{ .Badge }}</span>{{ end }}
+            <span class="fresh">{{ .Fresh }}</span>
+          </div>
         </header>
         <ul class="items">
           {{ range .Items }}
           <li class="item">
-            <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener">{{ .Title }}</a>
-            <div class="item__meta">
-              {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
-              {{ if not .PublishedAt.IsZero }}<span>{{ since .PublishedAt }} ago</span>{{ end }}
-              {{ if gt .Score 0 }}<span>{{ .Score }} pts</span>{{ end }}
-              {{ if gt .Comments 0 }}<span>{{ .Comments }} comments</span>{{ end }}
+            {{ if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
+            <div class="item__body">
+              <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ .Title }}</a>
+              <div class="item__meta">
+                {{ if .Source }}<span class="item__source">{{ .Source }}</span>{{ end }}
+                {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
+                {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
+                {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
+                {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
+              </div>
             </div>
           </li>
           {{ else }}
-          <li class="item item--empty">No items yet.</li>
+          <li class="item item--empty">Nothing here yet.</li>
           {{ end }}
         </ul>
       </section>

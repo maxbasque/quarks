@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Quark's
+Comment=Personal feed dashboard
+Exec=flatpak run com.google.Chrome --app=http://localhost:7373
+Icon=quarks
+Terminal=false
+Categories=Network;News;
+# Chromium sets the window class to chrome-<host>_<port>-<profile> in --app mode.
+# If the taskbar shows a generic Chrome icon, run `xprop WM_CLASS` on the window
+# and copy the second string here.
+StartupWMClass=chrome-localhost_7373-Default

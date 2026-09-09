@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -32,7 +33,7 @@ type Server struct {
 
 func NewServer(store *core.Store) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"since": humanSince,
+		"ago": ago,
 	}).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -89,15 +90,23 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	cols := make([][]widgetVM, n)
 	for _, st := range states {
-		vm := widgetVM{Title: st.Title, Items: st.Items, Fresh: freshLabel(st.LastOK)}
+		items := make([]core.Item, len(st.Items))
+		copy(items, st.Items)
+		for i := range items {
+			if strings.EqualFold(items[i].Source, st.Title) {
+				items[i].Source = "" // redundant with the widget header
+			}
+		}
+
+		vm := widgetVM{Title: st.Title, Items: items, Fresh: freshLabel(st.LastOK)}
 		ttl := meta.TTLs[st.Key]
 		switch {
 		case len(st.Items) == 0 && st.LastErr != "":
 			vm.Badge, vm.Danger = "offline", true
 		case st.LastErr != "":
-			vm.Badge = "stale · " + humanSince(st.LastOK)
+			vm.Badge = "stale · " + compactSince(st.LastOK)
 		case ttl > 0 && st.Stale(ttl*2):
-			vm.Badge = "stale · " + humanSince(st.LastOK)
+			vm.Badge = "stale · " + compactSince(st.LastOK)
 		}
 
 		ci := st.Column - 1
@@ -115,20 +124,33 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func freshLabel(t time.Time) string {
-	if t.IsZero() {
-		return "never"
+	switch {
+	case t.IsZero():
+		return "never updated"
+	case time.Since(t) < time.Minute:
+		return "updated just now"
+	default:
+		return "updated " + compactSince(t) + " ago"
 	}
-	return "updated " + humanSince(t) + " ago"
 }
 
-func humanSince(t time.Time) string {
+// ago renders an item timestamp; client JS keeps it current after load.
+func ago(t time.Time) string {
 	if t.IsZero() {
-		return "never"
+		return ""
 	}
+	if time.Since(t) < time.Minute {
+		return "just now"
+	}
+	return compactSince(t) + " ago"
+}
+
+// compactSince is a short "3m" / "5h" / "2d" duration.
+func compactSince(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return "0m"
 	case d < time.Hour:
 		return strconv.Itoa(int(d.Minutes())) + "m"
 	case d < 24*time.Hour:
