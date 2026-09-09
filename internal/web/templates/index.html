@@ -64,6 +64,7 @@
                 {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
                 {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
                 {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
+                <a class="item__read" href="/reader?url={{ .URL }}">read here</a>
               </div>
             </div>
           </li>

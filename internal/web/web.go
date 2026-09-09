@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"embed"
 	"html/template"
 	"math"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/reader"
 )
 
 //go:embed templates/*.html static/*
@@ -27,9 +29,10 @@ type Meta struct {
 
 // Server renders the dashboard from whatever is currently in the store.
 type Server struct {
-	store *core.Store
-	meta  atomic.Pointer[Meta]
-	tmpl  *template.Template
+	store  *core.Store
+	reader *reader.Reader
+	meta   atomic.Pointer[Meta]
+	tmpl   *template.Template
 }
 
 func NewServer(store *core.Store) (*Server, error) {
@@ -42,7 +45,7 @@ func NewServer(store *core.Store) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: tmpl}
+	s := &Server{store: store, reader: reader.New(), tmpl: tmpl}
 	s.meta.Store(&Meta{Columns: 3, Theme: "dark"})
 	return s, nil
 }
@@ -56,8 +59,44 @@ func (s *Server) Publish(m Meta) {
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(assets)))
+	mux.HandleFunc("/reader", s.handleReader)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
+}
+
+type readerVM struct {
+	Theme   string
+	Article reader.Article
+	Err     string
+	URL     string
+}
+
+// handleReader renders one extracted article. It works as a standalone page (a
+// plain link, no JS) and as a fragment the dashboard pulls in — the markup is the
+// same either way; app.js lifts the <article> out.
+func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("url")
+	vm := readerVM{Theme: s.meta.Load().Theme, URL: target}
+
+	if target == "" {
+		http.Error(w, "missing url", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+
+	art, err := s.reader.Get(ctx, target)
+	if err != nil {
+		vm.Err = err.Error()
+	} else {
+		vm.Article = art
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "reader.html", vm); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 type widgetVM struct {

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="{{ .Theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ if .Article.Title }}{{ .Article.Title }}{{ else }}Reader{{ end }} · Quark's</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="reader-page">
+  <article class="reader__article" data-reader data-url="{{ .URL }}">
+    <div class="reader__bar">
+      <a href="/" class="reader__back">← dashboard</a>
+      <a href="{{ .URL }}" target="_blank" rel="noopener noreferrer">open original ↗</a>
+    </div>
+    {{ if .Err }}
+      <p class="reader__err">Couldn’t extract this page.<br><span>{{ .Err }}</span></p>
+    {{ else }}
+      {{ if .Article.Title }}<h1 class="reader__title">{{ .Article.Title }}</h1>{{ end }}
+      {{ if or .Article.Byline .Article.SiteName }}
+      <p class="reader__byline">{{ .Article.Byline }}{{ if and .Article.Byline .Article.SiteName }} · {{ end }}{{ .Article.SiteName }}</p>
+      {{ end }}
+      <div class="reader__content">{{ .Article.HTML }}</div>
+    {{ end }}
+  </article>
+</body>
+</html>

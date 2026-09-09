@@ -30,6 +30,14 @@ cp config.example.yaml ~/.config/quarks/config.yaml
 Flags: `--config <path>` (default `~/.config/quarks/config.yaml`), `--addr <host:port>`
 (default `127.0.0.1:7373`). The config file is hot-reloaded on save.
 
+**Keyboard:** `j` / `k` move between items, `Enter` opens the article inline
+(extracted reader view), `o` opens the original, `Esc` closes reader panels.
+
+**Widget types:** `rss` (also covers YouTube channel feeds and the Reddit home
+feed via a secret URL), `hackernews`, `youtube`, `reddit`, `weather`. Secrets go
+in `~/.config/quarks/secrets.yaml` (`chmod 600`) and are referenced as
+`${secret:key}` — see `secrets.example.yaml`.
+
 ## Development
 
 ```bash

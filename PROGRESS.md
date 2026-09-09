@@ -17,7 +17,7 @@ for the app-window; launchers must call `flatpak run com.google.Chrome --app=…
 | M0 | Skeleton: config → registry → scheduler → store → web, one hardcoded feed | **✅ done (2026-09-08)** — HN frontpage rendering in browser |
 | M1 | It looks good: multi-column, cards, thumbnails, dark theme, auto-refresh, stale badges, YAML hot-reload | **✅ done (2026-09-08)** |
 | M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | **✅ done (2026-09-08)** |
-| M3 | Reader view: inline article extraction, keyboard nav (j/k, Enter, o) | not started |
+| M3 | Reader view: inline article extraction, keyboard nav (j/k, Enter, o) | **✅ done (2026-09-08)** |
 | M4 | Calendar: ICS subscription, agenda widget | not started |
 | M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **partial** — files written + `make install`; app-window WM_CLASS not yet verified on a live window |
 | M6 | OAuth subsystem: YouTube subscription sync, token storage/refresh, `quarks auth youtube` | not started |
@@ -41,6 +41,25 @@ What works, verified on the Bazzite box 2026-09-08:
   links open in a new tab, freshness badge (`stale · Nm` / `offline`), meta-refresh 60s.
 - Confirmed: real Hacker News front-page headlines render; snapshot file written;
   `stale`/`offline` badge logic exercised via the fetch-cancelled path.
+
+---
+
+## M3 — reader view (2026-09-08)
+
+- **`internal/reader`**: `Reader.Get(ctx, url)` fetches a page, runs
+  `go-shiori/go-readability`, sanitizes the extracted HTML with `bluemonday`
+  (UGCPolicy + nofollow), and caches the result in memory (1h TTL, 64 entries,
+  crude eviction). 8 MiB body cap; http/https only; rejects non-HTML responses.
+- **`GET /reader?url=…`**: renders one article via `reader.html`. Works as a plain
+  standalone page (no JS — the "read here" links just navigate) *and* as a fragment
+  that `app.js` lifts the `<article>` out of and expands inline under the item.
+- **Keyboard nav** (`app.js`): `j`/`k` move focus through items (outline), `Enter`
+  toggles the inline reader on the focused item, `o` opens the original, `Esc`
+  closes all reader panels. Ignored while typing in a field.
+- In-place refresh is **paused while any reader panel is open**, so the page never
+  gets yanked out from under you mid-read.
+- Tests: extraction + script/handler stripping + caching + scheme rejection.
+- New deps: `go-shiori/go-readability`, `microcosm-cc/bluemonday`.
 
 ---
 
@@ -153,9 +172,11 @@ internal/providers/             (each: <name>.go + <name>_test.go)
   weather/     Open-Meteo
   reddit/      r/<subs>.json  (fragile — residential IP)
   youtube/     channels → per-channel Atom, wraps rss
+internal/reader/reader.go       article extraction (go-readability + bluemonday)
 internal/web/
-  web.go                        handlers, view models, Meta (published on reload)
-  templates/index.html          html/template dashboard
+  web.go                        handlers (/, /reader), view models, Meta
+  templates/{index,reader}.html html/template
+  static/{style.css,app.js,favicon.svg}
 config.fake.yaml                UI-dev config pointing at fakefeed
 config.example.yaml, secrets.example.yaml
   static/{style.css,app.js,favicon.svg}
@@ -178,17 +199,19 @@ config.example.yaml
 
 ## Next session — start here
 
-**M3 — reader view.** Inline article expansion with extracted text
-(`go-shiori/go-readability`), fetched lazily on click, never during polling.
-Keyboard nav: `j`/`k` move, `Enter`/`o` open, `Esc` collapse. This needs a small
-client-side interaction layer and a `/reader?url=` endpoint.
+**M4 — calendar.** Subscribe to ICS URLs (secret URL from the secrets file), parse
+with an ICS library (`arran4/golang-ical` or similar), render an agenda widget
+(next N events, grouped by day). New `core` payload field like Weather, or a
+generic events type. Needs §14 Q5 (which calendar) for a real ICS export URL, but
+can be built and tested against a fixture .ics first.
 
-Before or alongside, quick wins with real value:
-- Point a real config at the Bazzite box and see if `type: reddit` works there
-  (it 403s from the dev environment).
+Then **M5 — packaging polish** (mostly done; verify WM_CLASS) and **M6 — OAuth**.
+
+Quick wins with real value:
+- Point a real config at the Bazzite box; check `type: reddit` works there (403s
+  from the dev environment).
 - Verify Radio-Canada feed URLs (§14 Q2) — still placeholders.
-- Confirm the Chrome `--app=` window WM_CLASS.
 
 Still needed from the user for a personalized dashboard (not blockers): real
 subreddit list, YouTube channel IDs, RC sections, the Reddit home-feed secret URL,
-which calendar for M4.
+which calendar.
