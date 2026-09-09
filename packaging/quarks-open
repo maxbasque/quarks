@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 # Open the dashboard in a chromeless app-window, using whatever Chromium-family
-# browser is installed (Flatpak first, then native). Firefox is not supported —
-# it dropped site-specific-browser mode.
+# browser is installed. Firefox is not supported — it dropped site-specific-
+# browser mode.
 set -euo pipefail
 
 url="${1:-http://localhost:7373}"
 
+if [ "$(uname)" = "Darwin" ]; then
+  for app in "Google Chrome" "Chromium" "Brave Browser" "Microsoft Edge"; do
+    if [ -d "/Applications/$app.app" ] || [ -d "$HOME/Applications/$app.app" ]; then
+      exec open -na "$app" --args --app="$url"
+    fi
+  done
+  echo "quarks-open: install Google Chrome (or Chromium/Brave/Edge)" >&2
+  exit 1
+fi
+
+# Linux: Flatpak first, then native binaries.
 for app in com.google.Chrome org.chromium.Chromium com.brave.Browser com.microsoft.Edge io.github.ungoogled_software.ungoogled_chromium; do
   if flatpak info "$app" >/dev/null 2>&1; then
     exec flatpak run "$app" --app="$url"
@@ -18,5 +29,5 @@ for bin in chromium chromium-browser google-chrome google-chrome-stable brave br
   fi
 done
 
-echo "quarks-open: no Chromium-family browser found (install e.g. 'flatpak install flathub com.google.Chrome')" >&2
+echo "quarks-open: no Chromium-family browser found (e.g. 'flatpak install flathub com.google.Chrome')" >&2
 exit 1
