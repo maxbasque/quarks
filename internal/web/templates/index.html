@@ -81,6 +81,33 @@
 {{ end }}
 
 {{ define "tabbody" }}
+  {{ with .Standings }}
+  <div class="standings">
+    {{ range .Groups }}
+    <div class="stgroup">
+      {{ if .Name }}<div class="stgroup__name">{{ .Name }}</div>{{ end }}
+      <table>
+        <thead><tr>
+          <th class="st-rank"></th><th class="st-team"></th>
+          {{ range .Columns }}<th>{{ . }}</th>{{ end }}
+        </tr></thead>
+        <tbody>
+          {{ range .Rows }}
+          <tr{{ if .Highlight }} class="is-me"{{ end }}>
+            <td class="st-rank">{{ .Rank }}</td>
+            <td class="st-team">
+              {{ if .Logo }}<img src="{{ .Logo }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
+              <span>{{ .Team }}</span>
+            </td>
+            {{ range .Values }}<td>{{ . }}</td>{{ end }}
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+    {{ end }}
+  </div>
+  {{ else }}
   {{ with .Weather }}
   <div class="weather">
     <div class="weather__now">
@@ -125,5 +152,6 @@
     <li class="item item--empty">Nothing here yet.</li>
     {{ end }}
   </ul>
-  {{ end }}
+  {{ end }}{{/* .Weather */}}
+  {{ end }}{{/* .Standings */}}
 {{ end }}

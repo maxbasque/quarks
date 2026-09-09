@@ -55,6 +55,7 @@ pages:
 
   - name: Sports
     columns: 2
+    column_weights: [1, 1]
     widgets:
       - type: nhl
         column: 1
@@ -63,8 +64,10 @@ pages:
         ttl: 1h
         limit: 12
 
-      - type: rss
+      - type: group
         column: 2
-        title: RC Sports
-        ttl: 20m
-        feeds: [https://ici.radio-canada.ca/info/rss/sports/en-continu]
+        title: Standings
+        tabs:
+          - { title: NHL, type: standings, league: nhl, group: division, team: MTL, ttl: 2h }
+          - { title: MLB, type: standings, league: mlb, ttl: 2h }
+          # nhl group: division | conference | league

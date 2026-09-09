@@ -15,11 +15,12 @@ type Provider interface {
 }
 
 // Payload is what one fetch produces. Feed widgets fill Items; the handful of
-// widgets that don't fit the Item shape (weather now, calendar later) fill their
-// own field. Exactly one field is populated.
+// widgets that don't fit the Item shape fill their own field. Exactly one field
+// is populated.
 type Payload struct {
-	Items   []Item
-	Weather *Weather
+	Items     []Item
+	Weather   *Weather
+	Standings *Standings
 }
 
 // Feed is a convenience for the common case.

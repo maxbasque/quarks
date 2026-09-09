@@ -44,6 +44,20 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Standings widget + NHL schedule dates (2026-09-09)
+
+- **`internal/providers/standings`**: `type: standings`, `league: nhl|mlb`. NHL from
+  `api-web.nhle.com/v1/standings/now` (grouped by `group: division|conference|league`),
+  MLB from `statsapi.mlb.com/.../standings` (always by division). Renders as stacked
+  grouped tables — rank, logo, team, then league-specific stat columns
+  (NHL: GP / W-L-OT / PTS / STRK; MLB: W-L / PCT / GB / STRK). `team:` highlights a
+  row. New `core.Standings` payload + `web` renderer (like Weather).
+- **NHL schedule**: the game item summary now leads with the local date/time
+  ("Sat Sep 19, 7:00 PM · Scotiabank Arena"), formatted in the club's timezone,
+  alongside the existing "in 9d".
+
+---
+
 ## Restyle: soft dark + IBM Plex Sans (2026-09-09)
 
 Dark-only now — light palette and the theme toggle are gone (`window.theme` still

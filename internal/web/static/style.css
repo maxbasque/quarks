@@ -437,3 +437,69 @@ a { color: inherit; }
 .weather__dayicon { font-size: 17.5px; }
 .weather__hl { font-variant-numeric: tabular-nums; font-weight: 500; }
 .weather__lo { color: var(--faint); font-weight: 400; margin-left: 4px; }
+
+/* ---- standings ---------------------------------------------------- */
+
+.standings { padding: 6px 0 10px; }
+
+.stgroup + .stgroup { margin-top: 4px; }
+
+.stgroup__name {
+  padding: 10px 14px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.standings table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.standings th {
+  padding: 3px 8px 5px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+}
+.standings td {
+  padding: 5px 8px;
+  text-align: right;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.standings tr:last-child td { border-bottom: 0; }
+
+.standings .st-rank {
+  width: 1%;
+  padding-left: 14px;
+  color: var(--faint);
+  text-align: right;
+}
+.standings .st-team {
+  text-align: left;
+  width: 99%;
+  color: var(--text-hi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.standings .st-team img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: -3px;
+  margin-right: 7px;
+}
+.standings td:last-child { padding-right: 14px; color: var(--muted); }
+
+.standings tr.is-me td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.standings tr.is-me .st-team { color: var(--accent); }

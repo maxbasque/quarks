@@ -172,13 +172,14 @@ func (s *Server) handleReader(w http.ResponseWriter, r *http.Request) {
 }
 
 type tabVM struct {
-	Key     string
-	Title   string
-	Items   []core.Item
-	Weather *core.Weather
-	Badge   string // "", "stale · 14m", "offline"
-	Fresh   string // "updated 3m ago" / "never updated"
-	Danger  bool
+	Key       string
+	Title     string
+	Items     []core.Item
+	Weather   *core.Weather
+	Standings *core.Standings
+	Badge     string // "", "stale · 14m", "offline"
+	Fresh     string // "updated 3m ago" / "never updated"
+	Danger    bool
 }
 
 type boxVM struct {
@@ -246,7 +247,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			bv := boxVM{Title: b.Title}
 			for _, key := range b.Members {
 				st := byKey[key]
-				tv := tabVM{Key: key, Title: st.Title, Weather: st.Weather, Fresh: freshLabel(st.LastOK)}
+				tv := tabVM{Key: key, Title: st.Title, Weather: st.Weather, Standings: st.Standings, Fresh: freshLabel(st.LastOK)}
 
 				items := make([]core.Item, len(st.Items))
 				copy(items, st.Items)
@@ -261,7 +262,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 				tv.Items = items
 
 				switch ttl := meta.TTLs[key]; {
-				case len(st.Items) == 0 && st.Weather == nil && st.LastErr != "":
+				case len(st.Items) == 0 && st.Weather == nil && st.Standings == nil && st.LastErr != "":
 					tv.Badge, tv.Danger = "offline", true
 				case st.LastErr != "":
 					tv.Badge = "stale · " + compactSince(st.LastOK)

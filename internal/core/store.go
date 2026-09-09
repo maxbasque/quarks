@@ -12,16 +12,17 @@ import (
 // items plus freshness metadata. The UI never blocks on the network — it renders
 // whatever is here.
 type WidgetState struct {
-	Key     string    `json:"key"`
-	Title   string    `json:"title"`
-	Order   int       `json:"order"`    // position in the config, for stable UI ordering
-	Column  int       `json:"column"`   //
-	Type    string    `json:"type"`     //
-	Items   []Item    `json:"items"`    // feed widgets
-	Weather *Weather  `json:"weather"`  // weather widgets
-	LastOK  time.Time `json:"last_ok"`  // zero until a fetch succeeds
-	LastErr string    `json:"last_err"` // last fetch error, "" if last fetch was ok
-	LastTry time.Time `json:"last_try"` //
+	Key       string     `json:"key"`
+	Title     string     `json:"title"`
+	Order     int        `json:"order"`     // position in the config, for stable UI ordering
+	Column    int        `json:"column"`    //
+	Type      string     `json:"type"`      //
+	Items     []Item     `json:"items"`     // feed widgets
+	Weather   *Weather   `json:"weather"`   // weather widgets
+	Standings *Standings `json:"standings"` // standings widgets
+	LastOK    time.Time  `json:"last_ok"`   // zero until a fetch succeeds
+	LastErr   string     `json:"last_err"`  // last fetch error, "" if last fetch was ok
+	LastTry   time.Time  `json:"last_try"`  //
 }
 
 // Stale reports whether the newest good data is older than ttl.
@@ -92,6 +93,7 @@ func (s *Store) SetPayload(key string, p Payload) {
 	now := time.Now()
 	st.Items = p.Items
 	st.Weather = p.Weather
+	st.Standings = p.Standings
 	st.LastOK = now
 	st.LastTry = now
 	st.LastErr = ""

@@ -75,7 +75,8 @@ type game struct {
 }
 
 type response struct {
-	Games []game `json:"games"`
+	ClubTimezone string `json:"clubTimezone"`
+	Games        []game `json:"games"`
 }
 
 func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
@@ -100,6 +101,13 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		return core.Payload{}, err
 	}
 
+	loc := time.UTC
+	if data.ClubTimezone != "" {
+		if l, err := time.LoadLocation(data.ClubTimezone); err == nil {
+			loc = l
+		}
+	}
+
 	cutoff := time.Now().Add(-30 * time.Hour) // keep a game visible through the night after
 	var items []core.Item
 	for _, g := range data.Games {
@@ -107,7 +115,7 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		if err != nil || start.Before(cutoff) {
 			continue
 		}
-		items = append(items, p.toItem(g, start))
+		items = append(items, p.toItem(g, start, loc))
 		if len(items) >= p.limit {
 			break
 		}
@@ -115,7 +123,7 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	return core.Feed(items), nil // already soonest-first from the API
 }
 
-func (p *Provider) toItem(g game, start time.Time) core.Item {
+func (p *Provider) toItem(g game, start time.Time, loc *time.Location) core.Item {
 	us, them := g.Home, g.Away
 	home := true
 	if g.Away.Abbrev == p.team {
@@ -128,16 +136,21 @@ func (p *Provider) toItem(g game, start time.Time) core.Item {
 		title = "@ " + them.name()
 	}
 
-	it := core.Item{
+	when := start.In(loc).Format("Mon Jan 2, 3:04 PM")
+	summary := when
+	if extra := gameExtra(g, us, them); extra != "" {
+		summary += "  ·  " + extra
+	}
+
+	return core.Item{
 		ID:          strconv.FormatInt(g.ID, 10),
 		Title:       title,
 		URL:         gameCenterURL + strconv.FormatInt(g.ID, 10),
 		Source:      gameTypeLabel(g.GameType),
 		PublishedAt: start,
 		Thumbnail:   them.Logo,
-		Summary:     gameSummary(g, us, them),
+		Summary:     summary,
 	}
-	return it
 }
 
 func gameTypeLabel(t int) string {
@@ -151,7 +164,8 @@ func gameTypeLabel(t int) string {
 	}
 }
 
-func gameSummary(g game, us, them team) string {
+// gameExtra is the score (once a game is under way) or the venue.
+func gameExtra(g game, us, them team) string {
 	live := g.GameState == "LIVE" || g.GameState == "CRIT"
 	done := g.GameState == "OFF" || g.GameState == "FINAL"
 
@@ -159,7 +173,7 @@ func gameSummary(g game, us, them team) string {
 		result := fmt.Sprintf("%d–%d", *us.Score, *them.Score)
 		switch {
 		case live:
-			return "Live · " + result
+			return "Live " + result
 		case *us.Score > *them.Score:
 			return "Won " + result
 		case *us.Score < *them.Score:
@@ -168,8 +182,5 @@ func gameSummary(g game, us, them team) string {
 			return "Final " + result
 		}
 	}
-	if g.Venue.Default != "" {
-		return g.Venue.Default
-	}
-	return ""
+	return g.Venue.Default
 }

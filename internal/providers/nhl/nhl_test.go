@@ -66,8 +66,8 @@ func TestFetch(t *testing.T) {
 	if it.Title != "vs Senators" {
 		t.Errorf("title = %q (MTL home vs OTT)", it.Title)
 	}
-	if it.Summary != "Bell Centre" {
-		t.Errorf("summary = %q", it.Summary)
+	if !strings.Contains(it.Summary, "Bell Centre") || !strings.Contains(it.Summary, ":") {
+		t.Errorf("summary should carry the date + venue, got %q", it.Summary)
 	}
 	if it.Source != "Preseason" {
 		t.Errorf("source = %q", it.Source)
