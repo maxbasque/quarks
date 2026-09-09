@@ -70,7 +70,7 @@ func (s *Server) Publish(m Meta) {
 
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/static/", http.FileServer(http.FS(assets)))
+	mux.Handle("/static/", noCacheRevalidate(http.FileServer(http.FS(assets))))
 	mux.HandleFunc("/manifest.webmanifest", s.handleManifest)
 	mux.HandleFunc("/open", s.handleOpen)
 	mux.HandleFunc("/refresh", s.handleRefresh)
@@ -275,6 +275,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Columns:  cols,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
 	if err := s.tmpl.ExecuteTemplate(w, "index.html", page); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
