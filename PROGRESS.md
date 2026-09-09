@@ -44,6 +44,16 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## YouTube playlists (2026-09-08)
+
+`type: youtube` now takes `playlists: [PL…]` alongside `channels: [UC…]` — both
+become `youtube.com/feeds/videos.xml` URLs (`?playlist_id=` / `?channel_id=`),
+keyless. Rejects `WL`/`LL` with a message pointing at the unlisted-playlist
+workaround. There is still no subscriptions feed without OAuth (M6) — the list
+comes from a Google Takeout export.
+
+---
+
 ## Layout v2 — viewport fit + tab groups (2026-09-08)
 
 Both from user feedback after M5.

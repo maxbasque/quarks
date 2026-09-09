@@ -26,13 +26,22 @@ widgets:
         ttl: 10m
         feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu]
 
-  - type: youtube
+  # YouTube: channel IDs and/or playlist IDs. No "my subscriptions" URL exists
+  # (that needs OAuth); export the list once from Google Takeout. Watch Later and
+  # Liked can't be fetched at all — use an unlisted playlist instead.
+  - type: group
     column: 2
     title: YouTube
-    ttl: 30m
-    limit: 20
-    channels:                 # channel IDs (start with UC…); videos are interleaved
-      - UCHnyfMqiRRG1u-2MsSQLbXA
+    tabs:
+      - title: Subs
+        type: youtube
+        ttl: 30m
+        limit: 25
+        channels: [UCHnyfMqiRRG1u-2MsSQLbXA]   # start with UC…; interleaved
+      - title: Queue
+        type: youtube
+        ttl: 20m
+        playlists: [PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]   # start with PL…
 
   # Your personalized Reddit home feed — a secret RSS URL from
   # reddit.com/prefs/feeds/, kept in secrets.yaml (see secrets.example.yaml).

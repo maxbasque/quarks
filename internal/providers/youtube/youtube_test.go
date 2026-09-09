@@ -42,9 +42,13 @@ func widgetConfig(t *testing.T, src string) core.WidgetConfig {
 }
 
 func TestChannelsBecomeFeeds(t *testing.T) {
+	var gotChannel, gotPlaylist string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("channel_id") != "UCtestchannelid000000" {
-			t.Errorf("channel_id = %q", r.URL.Query().Get("channel_id"))
+		if c := r.URL.Query().Get("channel_id"); c != "" {
+			gotChannel = c
+		}
+		if p := r.URL.Query().Get("playlist_id"); p != "" {
+			gotPlaylist = p
 		}
 		w.Header().Set("Content-Type", "application/xml")
 		_, _ = w.Write([]byte(channelFeed))
@@ -52,10 +56,10 @@ func TestChannelsBecomeFeeds(t *testing.T) {
 	defer srv.Close()
 
 	old := feedBase
-	feedBase = srv.URL + "/feeds/videos.xml?channel_id="
+	feedBase = srv.URL + "/feeds/videos.xml?"
 	defer func() { feedBase = old }()
 
-	p, err := New(widgetConfig(t, "type: youtube\ntitle: YT\nchannels: [UCtestchannelid000000]\n"))
+	p, err := New(widgetConfig(t, "type: youtube\ntitle: YT\nchannels: [UCtestchannelid000000]\nplaylists: [PLtestplaylist00000]\n"))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -63,26 +67,28 @@ func TestChannelsBecomeFeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	if len(got.Items) != 1 {
-		t.Fatalf("want 1 item, got %d", len(got.Items))
+	if len(got.Items) != 2 { // one from the channel feed, one from the playlist feed
+		t.Fatalf("want 2 items, got %d", len(got.Items))
 	}
-	it := got.Items[0]
-	if it.Source != "Some Channel" {
-		t.Errorf("source = %q, want the channel title", it.Source)
+	if gotChannel != "UCtestchannelid000000" || gotPlaylist != "PLtestplaylist00000" {
+		t.Errorf("requested channel=%q playlist=%q", gotChannel, gotPlaylist)
 	}
-	if it.Thumbnail == "" {
+	if got.Items[0].Thumbnail == "" {
 		t.Error("thumbnail not extracted from media:group")
 	}
 }
 
-func TestRejectsNonChannelID(t *testing.T) {
+func TestRejectsBadIDs(t *testing.T) {
 	if _, err := New(widgetConfig(t, "type: youtube\ntitle: YT\nchannels: [not-a-channel]\n")); err == nil {
 		t.Error("expected an error for a non-UC channel id")
 	}
+	if _, err := New(widgetConfig(t, "type: youtube\ntitle: YT\nplaylists: [WL]\n")); err == nil {
+		t.Error("expected an error for Watch Later (WL)")
+	}
 }
 
-func TestRequiresChannels(t *testing.T) {
+func TestRequiresSomething(t *testing.T) {
 	if _, err := New(widgetConfig(t, "type: youtube\ntitle: YT\n")); err == nil {
-		t.Error("expected an error with no channels")
+		t.Error("expected an error with no channels or playlists")
 	}
 }
