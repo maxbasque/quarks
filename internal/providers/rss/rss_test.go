@@ -115,6 +115,37 @@ func TestErrorWhenAllFeedsFail(t *testing.T) {
 	}
 }
 
+func TestRedditHomeFeedShowsSubreddit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+		  <title>home feed</title>
+		  <entry>
+		    <id>t3_a</id><title>A post</title>
+		    <category term="selfhosted" label="r/selfhosted"/>
+		    <link href="https://www.reddit.com/r/selfhosted/comments/a/a_post/"/>
+		    <updated>2026-09-08T12:00:00Z</updated>
+		  </entry>
+		</feed>`)
+	}))
+	defer srv.Close()
+
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: Reddit\nfeeds: [%s]\n", srv.URL))
+	if len(items) != 1 || items[0].Source != "r/selfhosted" {
+		t.Errorf("want Source r/selfhosted, got %+v", items)
+	}
+}
+
+func TestNonRedditFeedKeepsItsSource(t *testing.T) {
+	srv := httptest.NewServer(http.FileServer(http.Dir("testdata")))
+	defer srv.Close()
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: News\nfeeds: [%s/news.xml]\n", srv.URL))
+	for _, it := range items {
+		if it.Source != "News" {
+			t.Errorf("non-reddit item source = %q, want the widget title", it.Source)
+		}
+	}
+}
+
 func TestNoFeedsConfigured(t *testing.T) {
 	if _, err := rss.New(widgetConfig(t, "type: rss\ntitle: Empty\n")); err == nil {
 		t.Error("expected an error when no feeds are configured")

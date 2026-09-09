@@ -6,6 +6,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -151,8 +152,15 @@ func toItem(e *gofeed.Item, source string) core.Item {
 	if u := mediaThumbnail(e); u != "" {
 		it.Thumbnail = u
 	}
+	// A Reddit home-feed RSS mixes many subreddits; surface which one from the
+	// permalink (only reddit.com links match, so other feeds are untouched).
+	if m := redditPathRe.FindStringSubmatch(it.URL); m != nil {
+		it.Source = "r/" + m[1]
+	}
 	return it
 }
+
+var redditPathRe = regexp.MustCompile(`(?:^|\.)reddit\.com/r/([A-Za-z0-9_]+)/`)
 
 // mediaThumbnail digs a thumbnail URL out of the Media RSS extension, covering
 // both a bare <media:thumbnail> and the <media:group><media:thumbnail> nesting
