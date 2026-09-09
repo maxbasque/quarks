@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="{{ .Theme }}">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,7 +8,8 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0e1014">
+  <meta name="theme-color" content="#16171f">
+  <link rel="preload" as="font" type="font/woff2" href="/static/fonts/JetBrainsMono-Regular.woff2" crossorigin>
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
@@ -25,7 +26,6 @@
     <div class="topbar__right">
       <span class="tick" id="lastsync" hidden></span>
       <button class="iconbtn" id="refresh-all" type="button" title="Refresh everything" aria-label="Refresh everything">↻</button>
-      <button class="iconbtn" id="theme-toggle" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
     </div>
   </header>
 

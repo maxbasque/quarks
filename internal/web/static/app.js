@@ -4,22 +4,8 @@
 (() => {
   "use strict";
 
-  const root = document.documentElement;
   let openReaders = 0;
   let focused = -1;
-
-  // ---- theme toggle -------------------------------------------------------
-  const storedTheme = localStorage.getItem("quarks-theme");
-  if (storedTheme) root.dataset.theme = storedTheme;
-
-  const themeBtn = document.getElementById("theme-toggle");
-  const paintTheme = () => { themeBtn.textContent = root.dataset.theme === "dark" ? "☀" : "☾"; };
-  paintTheme();
-  themeBtn.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
-    localStorage.setItem("quarks-theme", root.dataset.theme);
-    paintTheme();
-  });
 
   // ---- relative timestamps ---------------------------------------------
   const rel = (iso) => {

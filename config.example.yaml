@@ -1,6 +1,3 @@
-window:
-  theme: dark              # dark | light  (in-app toggle overrides this per browser)
-
 # The dashboard can have several top-level pages — tabs in the title bar.
 # For a single page, drop `pages:` and put `widgets:` at the top level, with
 # optional `columns` / `column_weights` under `window:`.

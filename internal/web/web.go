@@ -18,7 +18,7 @@ import (
 	"github.com/maxbasque/quarks/internal/reader"
 )
 
-//go:embed templates/*.html static/*
+//go:embed templates/*.html static
 var assets embed.FS
 
 // Meta is the config-derived context the renderer needs beyond what the Store
