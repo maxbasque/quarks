@@ -1,7 +1,7 @@
 BINARY := quarks
 PKG    := ./cmd/quarks
 
-.PHONY: build run fakefeed dev open test vet tidy install clean
+.PHONY: build run fakefeed dev open test vet tidy install uninstall clean
 
 ADDR ?= http://localhost:7373
 
@@ -20,9 +20,9 @@ fakefeed:
 dev: build
 	./$(BINARY) --config config.fake.yaml
 
-# Open the dashboard in a chromeless Chrome app-window.
+# Open the dashboard in a chromeless app-window (any Chromium-family browser).
 open:
-	flatpak run com.google.Chrome --app=$(ADDR) >/dev/null 2>&1 &
+	./packaging/quarks-open $(ADDR)
 
 test:
 	go test ./...
@@ -33,9 +33,12 @@ vet:
 tidy:
 	go mod tidy
 
-# Install for the current user (binary + systemd --user service + .desktop).
+# Install for the current user (binary + open helper + systemd --user service + launcher).
 install:
 	./packaging/install.sh
+
+uninstall:
+	./packaging/uninstall.sh
 
 clean:
 	rm -f $(BINARY)

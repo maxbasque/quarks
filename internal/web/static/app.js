@@ -34,6 +34,27 @@
   tickTimes();
   setInterval(tickTimes, 30000);
 
+  // ---- open external links in the OS default browser -----------------
+  // Only when running as a standalone app-window — in a normal browser tab the
+  // native behaviour (open in this browser) is what you want.
+  const standalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone === true;
+
+  if (standalone) {
+    document.addEventListener(
+      "click",
+      (e) => {
+        const a = e.target.closest('a[target="_blank"]');
+        if (!a || !/^https?:\/\//i.test(a.href)) return;
+        e.preventDefault();
+        fetch("/open", { method: "POST", body: new URLSearchParams({ url: a.href }) })
+          .catch(() => window.open(a.href, "_blank", "noopener"));
+      },
+      true,
+    );
+  }
+
   // ---- inline reader --------------------------------------------------
   let openReaders = 0;
 

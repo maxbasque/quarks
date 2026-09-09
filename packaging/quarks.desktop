@@ -1,12 +1,16 @@
 [Desktop Entry]
 Type=Application
 Name=Quark's
-Comment=Personal feed dashboard
-Exec=flatpak run com.google.Chrome --app=http://localhost:7373
+GenericName=Feed dashboard
+Comment=Your feeds on one screen
+Exec=quarks-open
 Icon=quarks
 Terminal=false
 Categories=Network;News;
-# Chromium sets the window class to chrome-<host>_<port>-<profile> in --app mode.
-# If the taskbar shows a generic Chrome icon, run `xprop WM_CLASS` on the window
-# and copy the second string here.
-StartupWMClass=chrome-localhost_7373-Default
+Keywords=feed;dashboard;rss;news;
+
+# Chromium's window id for `--app=http://localhost…` (verified on KDE Wayland,
+# Chrome flatpak — the port is not part of the id). If a Chromium build reports
+# something else and the taskbar shows a generic icon, open the dashboard and use
+# Chrome's "Install Quark's…", which writes its own correct entry.
+StartupWMClass=chrome-localhost__-Default

@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"net/url"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,9 +61,43 @@ func (s *Server) Publish(m Meta) {
 func (s *Server) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.FileServer(http.FS(assets)))
+	mux.HandleFunc("/manifest.webmanifest", s.handleManifest)
+	mux.HandleFunc("/open", s.handleOpen)
 	mux.HandleFunc("/reader", s.handleReader)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
+}
+
+// handleOpen hands a URL to the OS default browser via xdg-open. The app-window
+// (Chromium in --app mode) would otherwise open links in a second Chromium
+// window; the frontend routes clicks here only when it is running standalone.
+func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	target := r.FormValue("url")
+	u, err := url.Parse(target)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		http.Error(w, "bad url", http.StatusBadRequest)
+		return
+	}
+	if err := exec.Command("xdg-open", u.String()).Start(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
+	data, err := assets.ReadFile("static/manifest.webmanifest")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write(data)
 }
 
 type readerVM struct {

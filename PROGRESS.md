@@ -19,7 +19,7 @@ for the app-window; launchers must call `flatpak run com.google.Chrome --app=…
 | M2 | The feeds: YouTube (imported list), Hacker News (Algolia), Reddit (private home feed + secrets file), weather | **✅ done (2026-09-08)** |
 | M3 | Reader view: inline article extraction, keyboard nav (j/k, Enter, o) | **✅ done (2026-09-08)** |
 | M4 | Calendar: ICS subscription, agenda widget | not started |
-| M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **partial** — files written + `make install`; app-window WM_CLASS not yet verified on a live window |
+| M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **✅ done (2026-09-08)** — installed + verified on the Bazzite box |
 | M6 | OAuth subsystem: YouTube subscription sync, token storage/refresh, `quarks auth youtube` | not started |
 | M7 | Optional shells: Wails native window or Bubble Tea TUI | not started |
 
@@ -41,6 +41,34 @@ What works, verified on the Bazzite box 2026-09-08:
   links open in a new tab, freshness badge (`stale · Nm` / `offline`), meta-refresh 60s.
 - Confirmed: real Hacker News front-page headlines render; snapshot file written;
   `stale`/`offline` badge logic exercised via the fetch-cancelled path.
+
+---
+
+## M5 — packaging (2026-09-08) — installed & verified on the Bazzite box
+
+- **`packaging/install.sh`** (`make install`), fully user-scoped, no root:
+  binary → `~/.local/bin/quarks`, `quarks-open` helper alongside, systemd `--user`
+  service enabled + (re)started, `.desktop` + hicolor icons (svg/192/512), seeds
+  `~/.config/quarks/config.yaml` if absent. **`uninstall.sh`** (`make uninstall`,
+  `--purge` also drops config/cache).
+- **`quarks-open`** — opens the dashboard in a chromeless app-window, trying
+  Flatpak Chrome/Chromium/Brave/Edge then native binaries. Firefox unsupported
+  (no SSB mode). `make open` uses it.
+- **`StartupWMClass=chrome-localhost__-Default`** — verified via a KWin script
+  against the live window (KDE Wayland, Chrome flatpak). The port is *not* in the
+  id.
+- **Web app manifest** (`/manifest.webmanifest` + icons + `theme-color`) so
+  Chrome's "Install Quark's…" is available as the zero-config PWA path.
+- **`POST /open`** → `xdg-open`: `app.js` routes external link clicks through it
+  **only when running standalone** (`display-mode: standalone`), so links open in
+  the OS default browser (Firefox) instead of a second Chromium window. Normal
+  browser tabs keep native behaviour. http/https only.
+- systemd unit: `Restart=on-failure`, `NoNewPrivileges`, `PrivateTmp`,
+  `WantedBy=default.target` (starts at login; `loginctl enable-linger` for
+  logged-out).
+
+Verified: `systemctl --user` service running and serving :7373; app-window opens
+chromeless with the right taskbar icon. Not tested: an actual reboot.
 
 ---
 
@@ -174,9 +202,14 @@ internal/providers/             (each: <name>.go + <name>_test.go)
   youtube/     channels → per-channel Atom, wraps rss
 internal/reader/reader.go       article extraction (go-readability + bluemonday)
 internal/web/
-  web.go                        handlers (/, /reader), view models, Meta
+  web.go                        handlers (/, /reader, /open, /manifest), Meta
   templates/{index,reader}.html html/template
-  static/{style.css,app.js,favicon.svg}
+  static/{style.css,app.js,favicon.svg,icon-*.png,manifest.webmanifest}
+packaging/
+  install.sh, uninstall.sh      user-scoped install (make install / uninstall)
+  quarks.service                systemd --user unit
+  quarks.desktop                app launcher (+ StartupWMClass)
+  quarks-open                   chromeless app-window launcher
 config.fake.yaml                UI-dev config pointing at fakefeed
 config.example.yaml, secrets.example.yaml
   static/{style.css,app.js,favicon.svg}
@@ -199,19 +232,19 @@ config.example.yaml
 
 ## Next session — start here
 
-**M4 — calendar.** Subscribe to ICS URLs (secret URL from the secrets file), parse
-with an ICS library (`arran4/golang-ical` or similar), render an agenda widget
-(next N events, grouped by day). New `core` payload field like Weather, or a
-generic events type. Needs §14 Q5 (which calendar) for a real ICS export URL, but
-can be built and tested against a fixture .ics first.
+M0–M3 + M5 are done. The dashboard is installed and running on the Bazzite box.
+**M4 (calendar) is skipped for now** by request; **M6 (OAuth for YouTube subs) is
+still deferred** per the plan.
 
-Then **M5 — packaging polish** (mostly done; verify WM_CLASS) and **M6 — OAuth**.
+Remaining work is mostly personalization + polish:
+- Replace the seeded `~/.config/quarks/config.yaml` (still the M0 one — just HN
+  via hnrss) with real feeds: HN via `type: hackernews`, weather, real subreddits,
+  YouTube channel IDs, verified Radio-Canada URLs (§14 Q2), the Reddit home-feed
+  secret URL in `secrets.yaml`.
+- Check `type: reddit` works from the residential IP (403s from the dev env).
+- Whatever annoys you in daily use — that's the M1–M5 review the plan's M7 calls
+  for (Wails native shell / Bubble Tea TUI are both optional).
 
-Quick wins with real value:
-- Point a real config at the Bazzite box; check `type: reddit` works there (403s
-  from the dev environment).
-- Verify Radio-Canada feed URLs (§14 Q2) — still placeholders.
-
-Still needed from the user for a personalized dashboard (not blockers): real
-subreddit list, YouTube channel IDs, RC sections, the Reddit home-feed secret URL,
-which calendar.
+If M4 comes back: ICS subscribe (secret URL), parse with `arran4/golang-ical`,
+agenda widget as its own payload type like Weather. Buildable against a fixture
+.ics before a real calendar URL exists (§14 Q5).

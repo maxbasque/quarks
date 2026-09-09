@@ -50,9 +50,21 @@ make open          # terminal 3: open the dashboard in a Chrome app-window
 `make dev` starts only the server — nothing appears until you open
 `http://localhost:7373` (via `make open`, or any browser tab).
 
-`make install` sets it up for the current user: binary in `~/.local/bin`, a systemd
-`--user` service for the server, and a `.desktop` entry for the Chrome app-window.
-Everything is user-scoped — no root, nothing layered onto the base image.
+## Install (Linux, user-scoped)
+
+```bash
+make install     # binary + quarks-open + systemd --user service + .desktop launcher
+make uninstall   # undo (add --purge via ./packaging/uninstall.sh to drop config/cache)
+```
+
+No root, nothing layered onto the base image. The server runs as a systemd `--user`
+service (starts at login; `loginctl enable-linger $USER` to keep it running logged
+out). Launch the window from your app menu ("Quark's") or `quarks-open`.
+
+The window is a chromeless Chromium/Chrome `--app=` window. When it runs standalone,
+clicking a link opens it in your **OS default browser** (via `xdg-open`), not a
+second Chromium window. For the cleanest taskbar integration, open the dashboard and
+use Chrome's "Install Quark's…".
 
 ## Layout
 

@@ -1,38 +1,68 @@
 #!/usr/bin/env bash
-# Install Quark's for the current user: binary in ~/.local/bin, a systemd --user
-# service for the server, and a .desktop entry for the app window.
-# Re-run any time to update. Nothing here needs root.
+# Install Quark's for the current user:
+#   - binary       -> ~/.local/bin/quarks
+#   - open helper  -> ~/.local/bin/quarks-open
+#   - service      -> systemd --user unit (starts the server at login)
+#   - launcher     -> ~/.local/share/applications/quarks.desktop (+ icon)
+#
+# Re-run any time to update. Nothing here needs root. Undo with uninstall.sh.
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin_dir="$HOME/.local/bin"
 app_dir="$HOME/.local/share/applications"
-icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
-unit_dir="$HOME/.config/systemd/user"
+icon_dir="$HOME/.local/share/icons/hicolor"
+unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/quarks"
 
-echo "==> building"
-( cd "$repo" && go build -o "$bin_dir/quarks" ./cmd/quarks )
+# go may live in Homebrew's prefix, which isn't always on a non-login PATH.
+if ! command -v go >/dev/null 2>&1; then
+  for p in /home/linuxbrew/.linuxbrew/bin /opt/homebrew/bin /usr/local/go/bin; do
+    [ -x "$p/go" ] && PATH="$p:$PATH"
+  done
+fi
+command -v go >/dev/null || { echo "install: 'go' not found — 'brew install go'"; exit 1; }
 
-echo "==> installing desktop entry + icon"
-mkdir -p "$app_dir" "$icon_dir"
-install -m 644 "$repo/packaging/quarks.desktop" "$app_dir/quarks.desktop"
-install -m 644 "$repo/internal/web/static/favicon.svg" "$icon_dir/quarks.svg"
-update-desktop-database "$app_dir" 2>/dev/null || true
+echo "==> building quarks"
+mkdir -p "$bin_dir"
+( cd "$repo" && go build -o "$bin_dir/quarks" ./cmd/quarks )
+install -m 755 "$repo/packaging/quarks-open" "$bin_dir/quarks-open"
+
+echo "==> installing launcher + icons"
+mkdir -p "$app_dir" "$icon_dir/scalable/apps" "$icon_dir/192x192/apps" "$icon_dir/512x512/apps"
+install -m 644 "$repo/packaging/quarks.desktop"          "$app_dir/quarks.desktop"
+install -m 644 "$repo/internal/web/static/favicon.svg"   "$icon_dir/scalable/apps/quarks.svg"
+install -m 644 "$repo/internal/web/static/icon-192.png"  "$icon_dir/192x192/apps/quarks.png"
+install -m 644 "$repo/internal/web/static/icon-512.png"  "$icon_dir/512x512/apps/quarks.png"
+update-desktop-database "$app_dir" >/dev/null 2>&1 || true
+gtk-update-icon-cache "$icon_dir" >/dev/null 2>&1 || true
 
 echo "==> installing systemd --user service"
 mkdir -p "$unit_dir"
 install -m 644 "$repo/packaging/quarks.service" "$unit_dir/quarks.service"
-systemctl --user daemon-reload
-systemctl --user enable --now quarks.service
+if command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+  systemctl --user daemon-reload
+  systemctl --user enable quarks.service
+  systemctl --user restart quarks.service   # pick up a rebuilt binary on re-run
+  systemctl --user --no-pager --lines=0 status quarks.service || true
+else
+  echo "   (no systemd --user session here — start the server yourself: quarks &)"
+fi
 
 if [ ! -f "$cfg_dir/config.yaml" ]; then
-  echo "==> seeding $cfg_dir/config.yaml from config.example.yaml"
+  echo "==> seeding $cfg_dir/config.yaml"
   mkdir -p "$cfg_dir"
   install -m 644 "$repo/config.example.yaml" "$cfg_dir/config.yaml"
 fi
 
-echo
-echo "Done. Server: systemctl --user status quarks   ·   http://localhost:7373"
-echo "Launch the window from your app menu (\"Quark's\"), or:"
-echo "  flatpak run com.google.Chrome --app=http://localhost:7373"
+cat <<EOF
+
+Installed.
+  server   : systemctl --user status quarks      (http://localhost:7373)
+  window   : launch "Quark's" from your app menu, or run: quarks-open
+  config   : $cfg_dir/config.yaml   (hot-reloaded on save)
+  secrets  : $cfg_dir/secrets.yaml  (chmod 600; see secrets.example.yaml)
+
+If ~/.local/bin isn't on your PATH, add it to your shell profile.
+To keep the server running when logged out:  loginctl enable-linger $USER
+EOF
