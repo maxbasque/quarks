@@ -30,21 +30,22 @@
       <section class="box{{ if .Tabbed }} box--tabbed{{ end }}{{ if .Danger }} box--danger{{ end }}"
                data-box="{{ (index .Tabs 0).Key }}">
         <header class="box__head">
-          <div class="box__tabs" role="tablist">
+          {{ if .Tabbed }}
+          <div class="box__headtop">
             {{ if .Title }}<span class="box__label">{{ .Title }}</span>{{ end }}
+            {{ template "boxstatus" (index .Tabs 0) }}
+          </div>
+          <div class="box__tabs" role="tablist">
             {{ range $i, $t := .Tabs }}
             <button type="button" class="box__tab{{ if eq $i 0 }} is-active{{ end }}" role="tab"
                     data-tab="{{ $i }}" data-fresh="{{ $t.Fresh }}" data-badge="{{ $t.Badge }}"
                     {{ if $t.Danger }}data-danger="1"{{ end }}>{{ $t.Title }}</button>
             {{ end }}
           </div>
-          <div class="box__status">
-            {{ with (index .Tabs 0) }}
-            <span class="badge{{ if .Danger }} badge--danger{{ end }}"{{ if not .Badge }} hidden{{ end }}>{{ .Badge }}</span>
-            <span class="fresh">{{ .Fresh }}</span>
-            {{ end }}
-            <button class="box__refresh" type="button" title="Refresh" aria-label="Refresh">↻</button>
-          </div>
+          {{ else }}
+          <h2 class="box__title">{{ (index .Tabs 0).Title }}</h2>
+          {{ template "boxstatus" (index .Tabs 0) }}
+          {{ end }}
         </header>
         <div class="box__panels">
           {{ range $i, $t := .Tabs }}
@@ -60,6 +61,14 @@
   </main>
 </body>
 </html>
+
+{{ define "boxstatus" }}
+<div class="box__status">
+  <span class="badge{{ if .Danger }} badge--danger{{ end }}"{{ if not .Badge }} hidden{{ end }}>{{ .Badge }}</span>
+  <span class="fresh">{{ .Fresh }}</span>
+  <button class="box__refresh" type="button" title="Refresh" aria-label="Refresh">↻</button>
+</div>
+{{ end }}
 
 {{ define "tabbody" }}
   {{ with .Weather }}

@@ -44,6 +44,15 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Tabbed-card header two rows (2026-09-08)
+
+A tab group's header now stacks: label + status on top, the tab strip on its own
+row below — so 5+ tabs fit instead of being clipped by the status area.
+Single-widget cards keep the one-line title + status header. Templates gained a
+shared `boxstatus` define.
+
+---
+
 ## Column weights (2026-09-08)
 
 `window.column_weights: [1, 1.6, 1]` sizes columns relative to each other (via a
