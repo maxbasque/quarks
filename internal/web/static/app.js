@@ -227,14 +227,22 @@
   };
 
   let refreshing = false;
+  let lastEtag = null;
   async function refresh() {
     if (refreshing || openReaders > 0) return;
     refreshing = true;
     try {
+      const res = await fetch(location.pathname, {
+        cache: "no-store",
+        headers: lastEtag ? { "If-None-Match": lastEtag } : {},
+      });
+      if (res.status === 304) { showSync(); return; } // nothing changed on the server
+      lastEtag = res.headers.get("ETag");
+
       const scrolls = {};
       pagesEl.querySelectorAll(".panel[data-key]").forEach((p) => { scrolls[p.dataset.key] = p.scrollTop; });
 
-      const html = await (await fetch(location.pathname, { cache: "no-store" })).text();
+      const html = await res.text();
       const next = new DOMParser().parseFromString(html, "text/html").getElementById("pages");
       if (next) {
         pagesEl.replaceWith(next);

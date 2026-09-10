@@ -44,6 +44,26 @@ What works, verified on the Bazzite box 2026-09-08:
 
 ---
 
+## Perf pass (2026-09-09)
+
+- **Render cache for `/`**: the store carries a version (`Gen()`) bumped only when
+  visible content actually changes; the web layer bumps its own on config reload.
+  `handleIndex` serves a cached render + `ETag` and rebuilds only on a version
+  change. `SetPayload` compares item IDs so an unchanged (HTTP 304) refetch bumps
+  nothing. The client sends `If-None-Match` on its poll and no-ops on a 304.
+- **Conditional RSS fetches**: the `rss` provider now does its own HTTP GET with
+  `If-None-Match` / `If-Modified-Since` per feed, keeps the parsed items per feed,
+  and returns them unchanged on a 304 (no re-download, no re-parse). youtube gets
+  this for free.
+- **Scheduler**: the redundant-label trim (`Source == title`, `Author == Source`)
+  moved out of every render into the scheduler (once per fetch); cold-start
+  fetches are staggered 150 ms apart (capped) instead of firing all at once.
+- **Build**: `-trimpath -ldflags="-s -w"` → 17.4 MB → 12.2 MB. Snapshots use
+  compact JSON. Dropped the 500-weight font (~24 KB), removed
+  `text-rendering: optimizeLegibility`. Client polls every 90 s.
+
+---
+
 ## Standings widget + NHL schedule dates (2026-09-09)
 
 - **`internal/providers/standings`**: `type: standings`, `league: nhl|mlb`. NHL from

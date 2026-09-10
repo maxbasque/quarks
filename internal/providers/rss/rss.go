@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
+	"net/http"
 	"regexp"
 	"sort"
 	"strings"
@@ -16,6 +18,8 @@ import (
 
 	"github.com/maxbasque/quarks/internal/core"
 )
+
+const userAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
 
 type settings struct {
 	Feeds  []string `yaml:"feeds"`
@@ -34,11 +38,19 @@ type Provider struct {
 	interleave bool
 	summaries  bool // show a plain-text excerpt under each title
 	parser     *gofeed.Parser
+	http       *http.Client
+
+	// per-feed conditional-request state. Fetch is never concurrent for one
+	// widget (the scheduler serializes it), so no lock is needed.
+	cond  map[string]condTags
+	cache map[string][]core.Item
 }
+
+type condTags struct{ etag, lastMod string }
 
 func newParser() *gofeed.Parser {
 	p := gofeed.NewParser()
-	p.UserAgent = "quarks/0.1 (+https://github.com/maxbasque/quarks)"
+	p.UserAgent = userAgent
 	return p
 }
 
@@ -58,19 +70,26 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	}
 	summaries := s.Summary == nil || *s.Summary
 
-	return &Provider{
-		feeds:      s.Feeds,
-		source:     source,
-		interleave: s.Interleave,
-		summaries:  summaries,
-		parser:     newParser(),
-	}, nil
+	return newProvider(s.Feeds, source, s.Interleave, summaries), nil
 }
 
 // NewWithFeeds builds an rss provider directly, for other providers that are
 // really just RSS with a nicer config surface (e.g. youtube).
 func NewWithFeeds(feeds []string, source string, interleave, summaries bool) core.Provider {
-	return &Provider{feeds: feeds, source: source, interleave: interleave, summaries: summaries, parser: newParser()}
+	return newProvider(feeds, source, interleave, summaries)
+}
+
+func newProvider(feeds []string, source string, interleave, summaries bool) *Provider {
+	return &Provider{
+		feeds:      feeds,
+		source:     source,
+		interleave: interleave,
+		summaries:  summaries,
+		parser:     newParser(),
+		http:       &http.Client{},
+		cond:       map[string]condTags{},
+		cache:      map[string][]core.Item{},
+	}
 }
 
 func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
@@ -78,22 +97,13 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	var firstErr error
 
 	for _, url := range p.feeds {
-		feed, err := p.parser.ParseURLWithContext(url, ctx)
+		one, err := p.feedItems(ctx, url)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("%s: %w", url, err)
 			}
 			continue
 		}
-		source := p.source
-		if source == "" && feed.Title != "" {
-			source = feed.Title
-		}
-		one := make([]core.Item, 0, len(feed.Items))
-		for _, e := range feed.Items {
-			one = append(one, p.toItem(e, source))
-		}
-		sortByDate(one)
 		perFeed = append(perFeed, one)
 	}
 
@@ -114,6 +124,58 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		sortByDate(items)
 	}
 	return core.Feed(items), nil
+}
+
+// feedItems fetches and parses one feed, using an ETag / Last-Modified
+// conditional request. On a 304 it returns the previously parsed items without
+// re-downloading or re-parsing.
+func (p *Provider) feedItems(ctx context.Context, url string) ([]core.Item, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	if c := p.cond[url]; c.etag != "" || c.lastMod != "" {
+		if c.etag != "" {
+			req.Header.Set("If-None-Match", c.etag)
+		}
+		if c.lastMod != "" {
+			req.Header.Set("If-Modified-Since", c.lastMod)
+		}
+	}
+
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return p.cache[url], nil // unchanged since last fetch
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http %d", resp.StatusCode)
+	}
+
+	body := io.LimitReader(resp.Body, 16<<20)
+	feed, err := p.parser.Parse(body)
+	if err != nil {
+		return nil, err
+	}
+
+	source := p.source
+	if source == "" && feed.Title != "" {
+		source = feed.Title
+	}
+	items := make([]core.Item, 0, len(feed.Items))
+	for _, e := range feed.Items {
+		items = append(items, p.toItem(e, source))
+	}
+	sortByDate(items)
+
+	p.cond[url] = condTags{etag: resp.Header.Get("Etag"), lastMod: resp.Header.Get("Last-Modified")}
+	p.cache[url] = items
+	return items, nil
 }
 
 func sortByDate(items []core.Item) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -44,7 +45,11 @@ type Store struct {
 	mu       sync.RWMutex
 	cacheDir string
 	states   map[string]*WidgetState
+	gen      atomic.Uint64 // bumped on every change, so the web layer can cache renders
 }
+
+// Gen is a version number that changes whenever any widget state changes.
+func (s *Store) Gen() uint64 { return s.gen.Load() }
 
 func NewStore(cacheDir string) (*Store, error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
@@ -63,6 +68,7 @@ func (s *Store) Register(key, title string, order, column int, typ string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.gen.Add(1)
 	if st, ok := s.states[key]; ok {
 		st.Title, st.Order, st.Column, st.Type = title, order, column, typ
 		return
@@ -86,11 +92,14 @@ func (s *Store) Retain(keep map[string]bool) {
 		if !keep[k] {
 			delete(s.states, k)
 			_ = os.Remove(s.path(k))
+			s.gen.Add(1)
 		}
 	}
 }
 
-// SetPayload records a successful fetch and writes the snapshot.
+// SetPayload records a successful fetch and writes the snapshot. It only bumps
+// the render version when the visible content actually changed, so an unchanged
+// (e.g. HTTP 304) refetch costs nothing downstream.
 func (s *Store) SetPayload(key string, p Payload) {
 	s.mu.Lock()
 	st := s.states[key]
@@ -98,6 +107,7 @@ func (s *Store) SetPayload(key string, p Payload) {
 		s.mu.Unlock()
 		return
 	}
+	changed := st.LastErr != "" || !sameContent(st, p)
 	now := time.Now()
 	st.Items = p.Items
 	st.Weather = p.Weather
@@ -108,6 +118,9 @@ func (s *Store) SetPayload(key string, p Payload) {
 	snapshot := *st
 	s.mu.Unlock()
 
+	if changed {
+		s.gen.Add(1)
+	}
 	s.persist(key, snapshot)
 }
 
@@ -124,7 +137,23 @@ func (s *Store) SetError(key string, err error) {
 	snapshot := *st
 	s.mu.Unlock()
 
+	s.gen.Add(1)
 	s.persist(key, snapshot)
+}
+
+func sameContent(st *WidgetState, p Payload) bool {
+	if p.Weather != nil || p.Standings != nil {
+		return false // small, changes most fetches — just re-render
+	}
+	if st.Weather != nil || st.Standings != nil || len(st.Items) != len(p.Items) {
+		return false
+	}
+	for i := range p.Items {
+		if st.Items[i].ID != p.Items[i].ID {
+			return false
+		}
+	}
+	return true
 }
 
 // Snapshot returns a copy of all widget states.

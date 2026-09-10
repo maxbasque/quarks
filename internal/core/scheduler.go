@@ -45,12 +45,12 @@ func (s *Scheduler) Run(ctx context.Context) {
 	s.runCtx = ctx
 
 	var wg sync.WaitGroup
-	for _, j := range s.jobs {
+	for i, j := range s.jobs {
 		wg.Add(1)
-		go func(j *job) {
+		go func(j *job, i int) {
 			defer wg.Done()
-			s.loop(ctx, j)
-		}(j)
+			s.loop(ctx, j, i)
+		}(j, i)
 	}
 	<-ctx.Done()
 	wg.Wait()
@@ -84,11 +84,19 @@ func (s *Scheduler) Refresh(key string) bool {
 	return false
 }
 
-func (s *Scheduler) loop(ctx context.Context, j *job) {
+func (s *Scheduler) loop(ctx context.Context, j *job, idx int) {
 	// Fetch straight away only if the cache (from disk, or a previous config
 	// generation) isn't already fresh — so editing the config doesn't restart a
-	// fetch storm.
+	// fetch storm. Stagger the first fetch a little so a cold start doesn't hit
+	// every feed at once.
 	if !s.store.Fresh(j.key, j.ttl) {
+		if d := time.Duration(min(idx, 20)) * 150 * time.Millisecond; d > 0 {
+			select {
+			case <-time.After(d):
+			case <-ctx.Done():
+				return
+			}
+		}
 		s.fetch(ctx, j)
 	}
 

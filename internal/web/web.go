@@ -1,8 +1,11 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"fmt"
 	"html/template"
 	"math"
 	"net/http"
@@ -11,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,7 +55,19 @@ type Server struct {
 	reader  *reader.Reader
 	refresh func(key string) bool // fetch now, bypassing the schedule
 	meta    atomic.Pointer[Meta]
+	metaGen atomic.Uint64
 	tmpl    *template.Template
+
+	renderMu sync.Mutex
+	rendered atomic.Pointer[renderedIndex]
+}
+
+// renderedIndex is a cached render of "/" plus the store/meta versions it was
+// built from, so repeated polls of an unchanged dashboard cost a version compare.
+type renderedIndex struct {
+	storeGen, metaGen uint64
+	etag              string
+	body              []byte
 }
 
 func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error) {
@@ -73,6 +89,7 @@ func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error
 // request handling.
 func (s *Server) Publish(m Meta) {
 	s.meta.Store(&m)
+	s.metaGen.Add(1)
 }
 
 func (s *Server) Routes() *http.ServeMux {
@@ -225,6 +242,51 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ri := s.indexHTML()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", ri.etag)
+	if strings.Contains(r.Header.Get("If-None-Match"), ri.etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = w.Write(ri.body)
+}
+
+// indexHTML returns the current rendered "/", rebuilding it only when the store
+// or the config has changed since the last render.
+func (s *Server) indexHTML() *renderedIndex {
+	sg, mg := s.store.Gen(), s.metaGen.Load()
+	if ri := s.rendered.Load(); ri != nil && ri.storeGen == sg && ri.metaGen == mg {
+		return ri
+	}
+
+	s.renderMu.Lock()
+	defer s.renderMu.Unlock()
+
+	// read versions again inside the lock, then snapshot, so the render can't be
+	// tagged newer than its inputs
+	sg, mg = s.store.Gen(), s.metaGen.Load()
+	if ri := s.rendered.Load(); ri != nil && ri.storeGen == sg && ri.metaGen == mg {
+		return ri
+	}
+
+	var buf bytes.Buffer
+	if err := s.tmpl.ExecuteTemplate(&buf, "index.html", s.buildIndexVM()); err != nil {
+		return &renderedIndex{etag: `"error"`, body: []byte("render error: " + err.Error())}
+	}
+	sum := sha256.Sum256(buf.Bytes())
+	ri := &renderedIndex{
+		storeGen: sg, metaGen: mg,
+		etag: fmt.Sprintf(`"%x"`, sum[:12]),
+		body: buf.Bytes(),
+	}
+	s.rendered.Store(ri)
+	return ri
+}
+
+func (s *Server) buildIndexVM() indexVM {
 	meta := s.meta.Load()
 
 	byKey := make(map[string]core.WidgetState)
@@ -287,12 +349,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Columns:  cols,
 		})
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	if err := s.tmpl.ExecuteTemplate(w, "index.html", vm); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return vm
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
