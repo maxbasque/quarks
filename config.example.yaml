@@ -53,6 +53,37 @@ pages:
         feeds: [https://www.noovo.info/arc/outboundfeeds/rss/]
         # summary: false        # rss items show a 2-line excerpt by default
 
+      # Wikipedia "On this day" for today's date. Keyless. lang: en | fr | de |
+      # sv | pt | ru | es …  mode: selected (curated) | events | births | deaths
+      # | holidays | all
+      - type: onthisday
+        column: 3
+        title: Éphéméride
+        ttl: 12h
+        lang: fr
+        mode: selected
+
+      # Wikimedia Commons "Picture of the Day": one full-width image + caption.
+      # Keyless. lang sets the caption language (falls back to English).
+      - type: potd
+        column: 3
+        title: Photo du jour
+        ttl: 6h
+        lang: fr
+
+      # Recent locally-rare bird sightings from eBird. Needs a free token
+      # (ebird.org/api/keygen) in secrets.yaml. Give it a region code
+      # (region: CA-QC) or a lat/lng + dist (km); back is how many days to scan.
+      - type: ebird
+        column: 3
+        title: Oiseaux
+        ttl: 3h
+        token: "${secret:ebird_key}"
+        lat: 45.50
+        lng: -73.57
+        dist: 30
+        back: 14
+
   - name: Sports
     columns: 2
     column_weights: [1, 1]

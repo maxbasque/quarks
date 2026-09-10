@@ -133,8 +133,9 @@
   {{ else }}
   <ul class="items">
     {{ range .Items }}
-    <li class="item">
-      {{ if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
+    <li class="item{{ if .Hero }} item--hero{{ end }}">
+      {{ if and .Hero .Thumbnail }}<a href="{{ .URL }}" target="_blank" rel="noopener noreferrer"><img class="item__hero" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer"></a>
+      {{ else if .Thumbnail }}<img class="item__thumb" src="{{ .Thumbnail }}" alt="" loading="lazy" referrerpolicy="no-referrer">{{ end }}
       <div class="item__body">
         <a class="item__link" href="{{ .URL }}" target="_blank" rel="noopener noreferrer">{{ .Title }}</a>
         {{ if .Summary }}<p class="item__summary">{{ .Summary }}</p>{{ end }}
@@ -144,7 +145,7 @@
           {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
           {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
           {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
-          <a class="item__read" href="/reader?url={{ .URL }}">read here</a>
+          {{ if not .Hero }}<a class="item__read" href="/reader?url={{ .URL }}">read here</a>{{ end }}
         </div>
       </div>
     </li>

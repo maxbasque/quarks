@@ -17,8 +17,11 @@ import (
 
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/providers/ebird"
 	"github.com/maxbasque/quarks/internal/providers/hackernews"
 	"github.com/maxbasque/quarks/internal/providers/nhl"
+	"github.com/maxbasque/quarks/internal/providers/onthisday"
+	"github.com/maxbasque/quarks/internal/providers/potd"
 	"github.com/maxbasque/quarks/internal/providers/reddit"
 	"github.com/maxbasque/quarks/internal/providers/rss"
 	"github.com/maxbasque/quarks/internal/providers/standings"
@@ -62,6 +65,9 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("youtube", youtube.New)
 	reg.Register("nhl", nhl.New)
 	reg.Register("standings", standings.New)
+	reg.Register("onthisday", onthisday.New)
+	reg.Register("ebird", ebird.New)
+	reg.Register("potd", potd.New)
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 

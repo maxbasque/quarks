@@ -295,6 +295,17 @@ a { color: inherit; }
   border: 1px solid var(--border);
 }
 
+/* hero item: a single lead image stacked above the text (picture of the day) */
+.item--hero { flex-direction: column; gap: 8px; }
+.item__hero {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--inset);
+}
+
 .item__body { min-width: 0; }
 
 .item__link {

@@ -18,4 +18,5 @@ type Item struct {
 	CommentsURL string    // discussion link, distinct from URL
 	Summary     string    // short plain-text excerpt shown under the title
 	Body        string    // full text, populated lazily by the reader view
+	Hero        bool      // render Thumbnail as a full-width lead image, not a side thumb
 }
