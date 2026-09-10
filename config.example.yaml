@@ -4,7 +4,7 @@
 pages:
   - name: Home
     columns: 3
-    column_weights: [1, 1.6, 1]   # optional — relative column widths
+    column_weights: [27, 46, 27]  # relative widths; values summing to 100 read as %
 
     widgets:
       # a plain widget: one feed, one card
