@@ -23,7 +23,7 @@ command -v go >/dev/null || { echo "install: 'go' not found — 'brew install go
 
 echo "==> building quarks"
 mkdir -p "$bin_dir"
-( cd "$repo" && go build -o "$bin_dir/quarks" ./cmd/quarks )
+( cd "$repo" && go build -trimpath -ldflags="-s -w" -o "$bin_dir/quarks" ./cmd/quarks )
 install -m 755 "$repo/packaging/quarks-open" "$bin_dir/quarks-open"
 
 # ---- macOS ----------------------------------------------------------------

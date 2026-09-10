@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -10,6 +11,7 @@ import (
 // job binds a live provider to its widget key and TTL.
 type job struct {
 	key      string
+	title    string // widget display title, for trimming redundant Source
 	ttl      time.Duration
 	limit    int
 	provider Provider
@@ -32,8 +34,8 @@ func NewScheduler(store *Store, log *slog.Logger) *Scheduler {
 
 // Add registers a widget instance. key must be unique and stable across restarts
 // (it is the disk-cache filename).
-func (s *Scheduler) Add(key string, cfg WidgetConfig, p Provider) {
-	s.jobs = append(s.jobs, &job{key: key, ttl: cfg.TTL, limit: cfg.Limit, provider: p})
+func (s *Scheduler) Add(key, title string, cfg WidgetConfig, p Provider) {
+	s.jobs = append(s.jobs, &job{key: key, title: title, ttl: cfg.TTL, limit: cfg.Limit, provider: p})
 }
 
 // Run starts every widget loop and blocks until ctx is cancelled and every loop
@@ -83,7 +85,12 @@ func (s *Scheduler) Refresh(key string) bool {
 }
 
 func (s *Scheduler) loop(ctx context.Context, j *job) {
-	s.fetch(ctx, j) // once immediately
+	// Fetch straight away only if the cache (from disk, or a previous config
+	// generation) isn't already fresh — so editing the config doesn't restart a
+	// fetch storm.
+	if !s.store.Fresh(j.key, j.ttl) {
+		s.fetch(ctx, j)
+	}
 
 	t := time.NewTicker(j.ttl)
 	defer t.Stop()
@@ -115,6 +122,16 @@ func (s *Scheduler) fetch(ctx context.Context, j *job) {
 	}
 	if j.limit > 0 && len(payload.Items) > j.limit {
 		payload.Items = payload.Items[:j.limit]
+	}
+	// Trim redundant labels once here, not on every render.
+	for i := range payload.Items {
+		it := &payload.Items[i]
+		if strings.EqualFold(it.Source, j.title) {
+			it.Source = ""
+		}
+		if strings.EqualFold(it.Author, it.Source) {
+			it.Author = ""
+		}
 	}
 	s.log.Info("widget refreshed", "widget", j.key, "items", len(payload.Items))
 	s.store.SetPayload(j.key, payload)

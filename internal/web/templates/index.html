@@ -29,7 +29,7 @@
     </div>
   </header>
 
-  <div id="pages" data-refresh="60">
+  <div id="pages" data-refresh="90">
     {{ range $i, $p := .Pages }}
     <main class="grid page{{ if eq $i 0 }} is-active{{ end }}" data-page="{{ $p.Slug }}" style="--grid-cols: {{ $p.GridCols }}">
       {{ range $p.Columns }}

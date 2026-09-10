@@ -169,8 +169,9 @@ func (a *App) reload(ctx context.Context) error {
 				if err != nil {
 					return fmt.Errorf("page %q, box %d (%s): %w", pg.Name, bi, wc.Type, err)
 				}
-				a.store.Register(key, displayTitle(wc), order, wc.Column, wc.Type)
-				sched.Add(key, wc, provider)
+				title := displayTitle(wc)
+				a.store.Register(key, title, order, wc.Column, wc.Type)
+				sched.Add(key, title, wc, provider)
 				ttls[key] = wc.TTL
 				keep[key] = true
 				members = append(members, key)

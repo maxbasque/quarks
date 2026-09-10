@@ -30,6 +30,14 @@ func (s WidgetState) Stale(ttl time.Duration) bool {
 	return !s.LastOK.IsZero() && time.Since(s.LastOK) > ttl
 }
 
+// Fresh reports whether key has good data younger than ttl.
+func (s *Store) Fresh(key string, ttl time.Duration) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	st := s.states[key]
+	return st != nil && !st.LastOK.IsZero() && time.Since(st.LastOK) < ttl
+}
+
 // Store holds widget state in memory and mirrors each widget to a JSON file in
 // cacheDir so a cold start is populated instantly instead of blank.
 type Store struct {
@@ -132,15 +140,16 @@ func (s *Store) Snapshot() []WidgetState {
 }
 
 func (s *Store) persist(key string, st WidgetState) {
-	data, err := json.MarshalIndent(st, "", "  ")
+	data, err := json.Marshal(st)
 	if err != nil {
 		return
 	}
-	tmp := s.path(key) + ".tmp"
+	path := s.path(key)
+	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return
 	}
-	_ = os.Rename(tmp, s.path(key))
+	_ = os.Rename(tmp, path)
 }
 
 func (s *Store) path(key string) string {

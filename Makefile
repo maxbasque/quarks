@@ -6,7 +6,7 @@ PKG    := ./cmd/quarks
 ADDR ?= http://localhost:7373
 
 build:
-	go build -o $(BINARY) $(PKG)
+	go build -trimpath -ldflags="-s -w" -o $(BINARY) $(PKG)
 
 run: build
 	./$(BINARY)

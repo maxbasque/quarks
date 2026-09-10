@@ -247,19 +247,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			bv := boxVM{Title: b.Title}
 			for _, key := range b.Members {
 				st := byKey[key]
-				tv := tabVM{Key: key, Title: st.Title, Weather: st.Weather, Standings: st.Standings, Fresh: freshLabel(st.LastOK)}
-
-				items := make([]core.Item, len(st.Items))
-				copy(items, st.Items)
-				for i := range items {
-					if strings.EqualFold(items[i].Source, st.Title) {
-						items[i].Source = ""
-					}
-					if strings.EqualFold(items[i].Author, items[i].Source) {
-						items[i].Author = ""
-					}
+				tv := tabVM{
+					Key:       key,
+					Title:     st.Title,
+					Items:     st.Items, // already trimmed by the scheduler
+					Weather:   st.Weather,
+					Standings: st.Standings,
+					Fresh:     freshLabel(st.LastOK),
 				}
-				tv.Items = items
 
 				switch ttl := meta.TTLs[key]; {
 				case len(st.Items) == 0 && st.Weather == nil && st.Standings == nil && st.LastErr != "":
