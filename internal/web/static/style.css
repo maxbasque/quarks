@@ -105,6 +105,9 @@ a { color: inherit; }
 .iconbtn {
   width: 28px;
   height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
@@ -112,6 +115,7 @@ a { color: inherit; }
   cursor: pointer;
   font-size: 15.5px;
   line-height: 1;
+  text-decoration: none;
 }
 .iconbtn:hover { color: var(--text); border-color: var(--border-lit); }
 
@@ -404,6 +408,62 @@ a { color: inherit; }
 .reader-page .reader__content { font-size: 17.5px; line-height: 1.8; }
 .reader-page .reader__content p { margin: 0 0 1.1em; }
 .reader-page .reader__content img { height: auto; border-radius: 8px; margin: 0.5em 0; }
+
+/* ---- standalone settings page --------------------------------------- */
+
+.settings-page { display: flex; justify-content: center; overflow-y: auto; }
+.settings__wrap { max-width: 560px; width: 100%; padding: 28px 24px 64px; }
+.settings__bar { font-size: 14.5px; margin-bottom: 20px; }
+.settings__back { color: var(--link); text-decoration: none; }
+.settings__title { font-size: 25px; line-height: 1.3; margin: 0 0 20px; color: var(--text-hi); }
+
+.settings__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.settings__card-title { font-size: 16.5px; margin: 0 0 8px; color: var(--text-hi); }
+.settings__status { color: var(--muted); margin: 0; }
+.settings__status--ok { color: var(--good); }
+.settings__status--err { color: var(--danger); }
+
+.settings__field { display: block; margin-bottom: 14px; }
+.settings__field label { display: block; font-size: 13.5px; color: var(--muted); margin-bottom: 5px; }
+.settings__field input {
+  width: 100%;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  padding: 8px 10px;
+}
+.settings__field input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+.settings__btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border-lit);
+  border-radius: 7px;
+  color: var(--text-hi);
+  font: inherit;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.settings__btn:hover { border-color: var(--accent); }
+.settings__btn--link { display: inline-block; text-decoration: none; }
+
+.settings__snippet {
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px 14px;
+  font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
 
 /* ---- weather ------------------------------------------------------- */
 

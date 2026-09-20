@@ -36,9 +36,12 @@ type App struct {
 	store    *core.Store
 	srv      *web.Server
 
-	mu      sync.Mutex // guards current
+	mu      sync.Mutex // guards current, runCtx, lastMod
 	current *runtime
-	lastMod time.Time // touched only by Run and watch
+	runCtx  context.Context // set once Run starts; reloadNow needs it to tie a
+	// reload-triggered scheduler generation to the app's real shutdown signal
+	// instead of running until the process exits uncancelled
+	lastMod time.Time
 }
 
 // runtime is one generation of the scheduler — cancel it and wait on done to
@@ -68,7 +71,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 
-	srv, err := web.NewServer(store, a.Refresh)
+	srv, err := web.NewServer(store, a.Refresh, config.SecretsPath(cfgPath), a.reloadNow)
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +94,14 @@ func (a *App) Refresh(key string) bool {
 // Run loads the config, starts the HTTP server and the config watcher, and
 // blocks until ctx is cancelled.
 func (a *App) Run(ctx context.Context, addr string) error {
+	a.mu.Lock()
+	a.runCtx = ctx
+	a.mu.Unlock()
+
 	if err := a.reload(ctx); err != nil {
 		return fmt.Errorf("initial config: %w", err)
 	}
-	a.lastMod = a.watchStamp()
+	a.setLastMod(a.watchStamp())
 	go a.watch(ctx)
 
 	httpSrv := &http.Server{Addr: addr, Handler: a.srv.Routes()}
@@ -123,10 +130,10 @@ func (a *App) watch(ctx context.Context) {
 			return
 		case <-t.C:
 			mod := a.watchStamp()
-			if mod == a.lastMod || mod.IsZero() {
+			if mod == a.getLastMod() || mod.IsZero() {
 				continue
 			}
-			a.lastMod = mod
+			a.setLastMod(mod)
 			a.log.Info("config changed, reloading", "path", a.cfgPath)
 			if err := a.reload(ctx); err != nil {
 				a.log.Error("reload failed, keeping previous config", "err", err)
@@ -147,6 +154,37 @@ func (a *App) watchStamp() time.Time {
 		newest = si.ModTime()
 	}
 	return newest
+}
+
+func (a *App) getLastMod() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastMod
+}
+
+func (a *App) setLastMod(t time.Time) {
+	a.mu.Lock()
+	a.lastMod = t
+	a.mu.Unlock()
+}
+
+// reloadNow re-runs the config->registry->scheduler pipeline immediately,
+// outside the 2s file-watch poll — used after the settings page writes
+// secrets.yaml, so a connect/disconnect takes effect without waiting on the
+// poll. It reuses Run's lifetime context, so the new scheduler generation is
+// still torn down on shutdown like every other reload.
+func (a *App) reloadNow() error {
+	a.mu.Lock()
+	ctx := a.runCtx
+	a.mu.Unlock()
+	if ctx == nil {
+		return fmt.Errorf("app not running yet")
+	}
+	if err := a.reload(ctx); err != nil {
+		return err
+	}
+	a.setLastMod(a.watchStamp())
+	return nil
 }
 
 func (a *App) reload(ctx context.Context) error {

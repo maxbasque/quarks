@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Quark's</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="settings-page">
+  <div class="settings__wrap">
+    <div class="settings__bar">
+      <a href="/" class="settings__back">← dashboard</a>
+    </div>
+    <h1 class="settings__title">Settings</h1>
+
+    {{ range .Integrations }}
+    <section class="settings__card">
+      <h2 class="settings__card-title">{{ .Name }}</h2>
+      <p class="settings__status">{{ .Status }}</p>
+    </section>
+    {{ end }}
+  </div>
+</body>
+</html>

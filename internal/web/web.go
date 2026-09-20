@@ -51,12 +51,14 @@ type Box struct {
 
 // Server renders the dashboard from whatever is currently in the store.
 type Server struct {
-	store   *core.Store
-	reader  *reader.Reader
-	refresh func(key string) bool // fetch now, bypassing the schedule
-	meta    atomic.Pointer[Meta]
-	metaGen atomic.Uint64
-	tmpl    *template.Template
+	store       *core.Store
+	reader      *reader.Reader
+	refresh     func(key string) bool // fetch now, bypassing the schedule
+	secretsPath string                // for the settings page to read/write credentials
+	reloadNow   func() error          // re-run the app's config.Load -> registry -> scheduler pipeline
+	meta        atomic.Pointer[Meta]
+	metaGen     atomic.Uint64
+	tmpl        *template.Template
 
 	renderMu sync.Mutex
 	rendered atomic.Pointer[renderedIndex]
@@ -70,7 +72,7 @@ type renderedIndex struct {
 	body              []byte
 }
 
-func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error) {
+func NewServer(store *core.Store, refresh func(key string) bool, secretsPath string, reloadNow func() error) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"ago":   ago,
 		"temp":  temp,
@@ -80,7 +82,7 @@ func NewServer(store *core.Store, refresh func(key string) bool) (*Server, error
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, reader: reader.New(), refresh: refresh, tmpl: tmpl}
+	s := &Server{store: store, reader: reader.New(), refresh: refresh, secretsPath: secretsPath, reloadNow: reloadNow, tmpl: tmpl}
 	s.meta.Store(&Meta{Theme: "dark"})
 	return s, nil
 }
@@ -99,6 +101,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/open", s.handleOpen)
 	mux.HandleFunc("/refresh", s.handleRefresh)
 	mux.HandleFunc("/reader", s.handleReader)
+	mux.HandleFunc("/settings", s.handleSettings)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
 }
