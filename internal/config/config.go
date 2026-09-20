@@ -64,7 +64,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	secrets, err := loadSecrets(secretsPath(path))
+	secrets, err := loadSecrets(SecretsPath(path))
 	if err != nil {
 		return nil, err
 	}

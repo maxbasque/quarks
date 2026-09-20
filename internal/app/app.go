@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -144,7 +143,7 @@ func (a *App) watchStamp() time.Time {
 		return time.Time{}
 	}
 	newest := fi.ModTime()
-	if si, err := os.Stat(filepath.Join(filepath.Dir(a.cfgPath), "secrets.yaml")); err == nil && si.ModTime().After(newest) {
+	if si, err := os.Stat(config.SecretsPath(a.cfgPath)); err == nil && si.ModTime().After(newest) {
 		newest = si.ModTime()
 	}
 	return newest
