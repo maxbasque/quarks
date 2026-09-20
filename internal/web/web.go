@@ -114,6 +114,8 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/settings/spotify/authorize", s.handleSpotifyAuthorize)
 	mux.HandleFunc("/settings/spotify/callback", s.handleSpotifyCallback)
 	mux.HandleFunc("/settings/spotify/disconnect", s.handleSpotifyDisconnect)
+	mux.HandleFunc("/settings/secrets/set", s.handleSecretsSet)
+	mux.HandleFunc("/settings/secrets/delete", s.handleSecretsDelete)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
 }

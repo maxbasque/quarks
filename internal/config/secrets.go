@@ -154,3 +154,63 @@ func findSecretKey(root *yaml.Node, key string) int {
 	}
 	return -1
 }
+
+// ListSecretKeys returns every key currently set in the secrets file, sorted.
+// Like ReadSecretKeys, values never appear here — only names, since this
+// backs a settings UI that must not echo secret values back into HTML. A
+// missing file yields an empty list, not an error.
+func ListSecretKeys(path string) ([]string, error) {
+	all, err := loadSecrets(path)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(all))
+	for k, v := range all {
+		if v == "" {
+			continue // treat an empty value as "not set", same as ReadSecretKeys
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+// DeleteSecret removes key from the secrets file, preserving every other
+// key's order and comments the same way SetSecrets does when updating. A
+// missing key or a missing file is a no-op, not an error.
+func DeleteSecret(path string, key string) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	if doc.Kind == 0 || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return fmt.Errorf("%s: not a YAML mapping", path)
+	}
+
+	i := findSecretKey(root, key)
+	if i < 0 {
+		return nil
+	}
+	root.Content = append(root.Content[:i], root.Content[i+2:]...)
+
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}

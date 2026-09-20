@@ -3,7 +3,9 @@ package web
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -65,6 +67,26 @@ var settingsErrors = map[string]string{
 		"and that the redirect URI below is registered exactly in your Spotify app settings.",
 }
 
+// reservedSecretKeys are managed by their own dedicated section (Spotify's
+// connect flow) rather than the generic Secrets editor, so the same key isn't
+// editable two different ways at once.
+var reservedSecretKeys = map[string]bool{
+	"spotify_client_id":     true,
+	"spotify_client_secret": true,
+	"spotify_refresh_token": true,
+}
+
+// secretKeyRe restricts hand-entered secret key names to the same shape every
+// existing key in secrets.example.yaml already follows — lowercase,
+// digits, underscores. Keeps them valid as-is inside a ${secret:key} token.
+var secretKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+var secretsErrors = map[string]string{
+	"bad_key":      "Key names must be lowercase letters, numbers, and underscores, starting with a letter.",
+	"reserved_key": "That key is managed by the Spotify section above.",
+	"empty_value":  "Enter a value to save.",
+}
+
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
@@ -78,15 +100,38 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	secrets := s.otherSecretsVM()
+	if code := r.URL.Query().Get("serr"); code != "" {
+		secrets.Error = secretsErrors[code]
+	}
+
 	vm := settingsVM{
-		Integrations: []integrationVM{{Name: "Spotify", Status: sp.StatusLine()}},
-		Spotify:      sp,
+		Sections: []sectionVM{
+			{ID: "spotify", Label: "Spotify", Status: sp.StatusLine()},
+			{ID: "secrets", Label: "Secrets", Status: secrets.StatusLine()},
+		},
+		Spotify: sp,
+		Secrets: secrets,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "settings.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// otherSecretsVM lists every secrets.yaml key not already owned by a
+// dedicated section (Spotify's) — the generic editor for anything else a
+// widget config references via ${secret:key}.
+func (s *Server) otherSecretsVM() secretsSettingsVM {
+	keys, _ := config.ListSecretKeys(s.secretsPath)
+	var vm secretsSettingsVM
+	for _, k := range keys {
+		if !reservedSecretKeys[k] {
+			vm.Keys = append(vm.Keys, k)
+		}
+	}
+	return vm
 }
 
 func (s *Server) spotifySettingsVM(r *http.Request) spotifySettingsVM {
@@ -248,6 +293,50 @@ func (s *Server) handleSpotifyDisconnect(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
+func (s *Server) handleSecretsSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	key := strings.TrimSpace(r.FormValue("key"))
+	value := r.FormValue("value")
+
+	switch {
+	case !secretKeyRe.MatchString(key):
+		http.Redirect(w, r, "/settings?serr=bad_key#secrets", http.StatusSeeOther)
+		return
+	case reservedSecretKeys[key]:
+		http.Redirect(w, r, "/settings?serr=reserved_key#secrets", http.StatusSeeOther)
+		return
+	case value == "":
+		http.Redirect(w, r, "/settings?serr=empty_value#secrets", http.StatusSeeOther)
+		return
+	}
+
+	if err := config.SetSecrets(s.secretsPath, map[string]string{key: value}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = s.reloadNow()
+	http.Redirect(w, r, "/settings#secrets", http.StatusSeeOther)
+}
+
+func (s *Server) handleSecretsDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	key := strings.TrimSpace(r.FormValue("key"))
+	if key != "" && !reservedSecretKeys[key] {
+		if err := config.DeleteSecret(s.secretsPath, key); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = s.reloadNow()
+	}
+	http.Redirect(w, r, "/settings#secrets", http.StatusSeeOther)
+}
+
 func spotifyRedirectURI(r *http.Request) string {
 	return "http://" + r.Host + "/settings/spotify/callback"
 }
@@ -260,15 +349,31 @@ func randomState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// settingsVM is what settings.html renders.
+// settingsVM is what settings.html renders. Sections drives both the
+// left-hand nav and, in the same order, which cards appear in the main
+// column — each sectionVM.ID matches a <section id="..."> the nav links to.
 type settingsVM struct {
-	Integrations []integrationVM
-	Spotify      spotifySettingsVM
+	Sections []sectionVM
+	Spotify  spotifySettingsVM
+	Secrets  secretsSettingsVM
 }
 
-type integrationVM struct {
-	Name   string
+type sectionVM struct {
+	ID     string
+	Label  string
 	Status string
+}
+
+type secretsSettingsVM struct {
+	Keys  []string
+	Error string
+}
+
+func (sv secretsSettingsVM) StatusLine() string {
+	if len(sv.Keys) == 1 {
+		return "1 configured"
+	}
+	return fmt.Sprintf("%d configured", len(sv.Keys))
 }
 
 type spotifySettingsVM struct {

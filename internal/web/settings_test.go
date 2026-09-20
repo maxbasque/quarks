@@ -242,3 +242,78 @@ func TestSpotifyCredentialsFormOnlyOverwritesProvidedFields(t *testing.T) {
 		t.Errorf("client_secret not saved: %v", secrets)
 	}
 }
+
+func TestSecretsSetAndListAndDelete(t *testing.T) {
+	s := testServer(t, nil)
+
+	w := postForm(t, s, "/settings/secrets/set", url.Values{"key": {"reddit_home"}, "value": {"https://reddit.example/.rss"}})
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/settings#secrets" {
+		t.Fatalf("status=%d location=%q", w.Code, w.Header().Get("Location"))
+	}
+
+	page := get(t, s, "/settings")
+	if !strings.Contains(page.Body.String(), "reddit_home") {
+		t.Errorf("expected reddit_home to be listed:\n%s", page.Body.String())
+	}
+	if strings.Contains(page.Body.String(), "reddit.example") {
+		t.Error("secret value should never be echoed back into the page")
+	}
+
+	w = postForm(t, s, "/settings/secrets/delete", url.Values{"key": {"reddit_home"}})
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d", w.Code)
+	}
+	secrets, err := config.ReadSecretKeys(s.secretsPath, "reddit_home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secrets["reddit_home"] != "" {
+		t.Errorf("key should be deleted: %v", secrets)
+	}
+}
+
+func TestSecretsSetRejectsBadKey(t *testing.T) {
+	s := testServer(t, nil)
+	w := postForm(t, s, "/settings/secrets/set", url.Values{"key": {"Not A Valid Key!"}, "value": {"x"}})
+	if loc := w.Header().Get("Location"); loc != "/settings?serr=bad_key#secrets" {
+		t.Errorf("Location = %q", loc)
+	}
+}
+
+func TestSecretsSetRejectsReservedKey(t *testing.T) {
+	s := testServer(t, nil)
+	w := postForm(t, s, "/settings/secrets/set", url.Values{"key": {"spotify_client_id"}, "value": {"sneaky"}})
+	if loc := w.Header().Get("Location"); loc != "/settings?serr=reserved_key#secrets" {
+		t.Errorf("Location = %q", loc)
+	}
+	secrets, err := config.ReadSecretKeys(s.secretsPath, "spotify_client_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secrets["spotify_client_id"] != "" {
+		t.Error("the generic secrets form should not be able to write a reserved key")
+	}
+}
+
+func TestSecretsSetRejectsEmptyValue(t *testing.T) {
+	s := testServer(t, nil)
+	w := postForm(t, s, "/settings/secrets/set", url.Values{"key": {"reddit_home"}, "value": {""}})
+	if loc := w.Header().Get("Location"); loc != "/settings?serr=empty_value#secrets" {
+		t.Errorf("Location = %q", loc)
+	}
+}
+
+func TestSecretsDeleteOfReservedKeyIsNoop(t *testing.T) {
+	s := testServer(t, nil)
+	if err := config.SetSecrets(s.secretsPath, map[string]string{"spotify_client_id": "keep-me"}); err != nil {
+		t.Fatal(err)
+	}
+	postForm(t, s, "/settings/secrets/delete", url.Values{"key": {"spotify_client_id"}})
+	secrets, err := config.ReadSecretKeys(s.secretsPath, "spotify_client_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secrets["spotify_client_id"] != "keep-me" {
+		t.Error("the generic secrets delete should not remove a reserved key")
+	}
+}
