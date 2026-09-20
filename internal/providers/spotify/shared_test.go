@@ -52,11 +52,11 @@ func TestRotationSize(t *testing.T) {
 	}{
 		{0, 0},
 		{1, 1},
-		{288, 1},
-		{289, 2},
-		{500, 2},
-		{576, 2},
-		{577, 3},
+		{14, 14},
+		{15, 15}, // exactly at the cap: still the whole (small) list
+		{16, 15},
+		{226, 15}, // the real follow count this was tuned against
+		{1000, 15},
 	}
 	for _, c := range cases {
 		if got := rotationSize(c.total); got != c.want {

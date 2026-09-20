@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -14,7 +13,7 @@ import (
 )
 
 // pollInterval is the minimum gap enforced between two actual polls of a
-// slice of followed artists (see maybePoll) — not a ticker period. There is
+// batch of followed artists (see maybePoll) — not a ticker period. There is
 // no background goroutine; a poll only happens synchronously inside Fetch,
 // triggered by the widget's own TTL or a manual refresh click, so nothing
 // runs against Spotify's API while nobody's looking at the dashboard. This
@@ -22,30 +21,30 @@ import (
 // EPs tab), or repeated manual refresh clicks, from polling back-to-back.
 const pollInterval = 5 * time.Minute
 
-// rotationWindow is the target time for every followed artist to get checked
-// at least once, assuming Fetch is called at least every pollInterval. If
-// it's called less often (a longer widget TTL, or only manual refreshes), a
-// full pass just takes longer — still safe, never bursts.
-const rotationWindow = 24 * time.Hour
+// maxArtistsPerPoll bounds how many followed artists get checked in a single
+// poll. Empirically confirmed (2026-09-20, against a real account with 226
+// followed artists): ~50-75 sequential ArtistAlbums calls with zero spacing
+// is enough to trigger sustained 429s from Spotify. A batch well under that,
+// gated by pollInterval between polls, stays comfortably safe while covering
+// even a large follow list in roughly an hour or two instead of the better
+// part of a day.
+const maxArtistsPerPoll = 15
 
 // artistListTTL is how long the followed-artist list itself is trusted before
 // a refetch — cheap (a handful of paginated calls) but no reason to redo it
-// every tick.
+// every poll.
 const artistListTTL = 24 * time.Hour
 
-var ticksPerRotation = int(rotationWindow / pollInterval)
-
-// rotationSize returns how many artists to check on one tick so that a full
-// pass over total artists completes in roughly one rotationWindow.
+// rotationSize returns how many artists to check in one poll: the whole list
+// if it's smaller than the per-poll cap, otherwise the cap.
 func rotationSize(total int) int {
 	if total <= 0 {
 		return 0
 	}
-	n := int(math.Ceil(float64(total) / float64(ticksPerRotation)))
-	if n < 1 {
-		n = 1
+	if total < maxArtistsPerPoll {
+		return total
 	}
-	return n
+	return maxArtistsPerPoll
 }
 
 // releaseEntry is one cached upcoming release: the raw Spotify facts plus its
