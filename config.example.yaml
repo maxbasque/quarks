@@ -71,19 +71,6 @@ pages:
         ttl: 6h
         lang: fr
 
-      # Recent locally-rare bird sightings from eBird. Needs a free token
-      # (ebird.org/api/keygen) in secrets.yaml. Give it a region code
-      # (region: CA-QC) or a lat/lng + dist (km); back is how many days to scan.
-      - type: ebird
-        column: 3
-        title: Oiseaux
-        ttl: 3h
-        token: "${secret:ebird_key}"
-        lat: 45.50
-        lng: -73.57
-        dist: 30
-        back: 14
-
   - name: Sports
     columns: 2
     column_weights: [1, 1]
@@ -108,3 +95,36 @@ pages:
         title: Around the league
         mode: scores          # recent final scores, all teams
         ttl: 20m
+
+  # Upcoming releases from your followed Spotify artists, albums and EPs kept
+  # as separate tabs (true singles are filtered out entirely). Connect Spotify
+  # from the in-app Settings page (the gear icon in the header) — it writes
+  # spotify_client_id / spotify_client_secret / spotify_refresh_token to
+  # secrets.yaml for you and shows you this exact block to paste in. The
+  # actual API polling is shared between the two tabs and stays gentle on
+  # Spotify's rate limit regardless of how many artists you follow — see
+  # internal/providers/spotify for how.
+  - name: Media
+    columns: 1
+    widgets:
+      - type: group
+        title: Music
+        column: 1
+        tabs:
+          - title: Albums
+            type: spotify
+            include: album
+            ttl: 15m
+            client_id: "${secret:spotify_client_id}"
+            client_secret: "${secret:spotify_client_secret}"
+            refresh_token: "${secret:spotify_refresh_token}"
+          - title: EPs
+            type: spotify
+            include: eps
+            ttl: 15m
+            # ep_min_tracks: 3, ep_max_tracks: 7 by default — Spotify has no
+            # native "EP" concept, so this is a track-count heuristic; tune it
+            # here if it's misclassifying releases you follow.
+            client_id: "${secret:spotify_client_id}"
+            client_secret: "${secret:spotify_client_secret}"
+            refresh_token: "${secret:spotify_refresh_token}"
