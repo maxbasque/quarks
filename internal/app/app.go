@@ -22,6 +22,7 @@ import (
 	"github.com/maxbasque/quarks/internal/providers/potd"
 	"github.com/maxbasque/quarks/internal/providers/reddit"
 	"github.com/maxbasque/quarks/internal/providers/rss"
+	"github.com/maxbasque/quarks/internal/providers/spotify"
 	"github.com/maxbasque/quarks/internal/providers/standings"
 	"github.com/maxbasque/quarks/internal/providers/weather"
 	"github.com/maxbasque/quarks/internal/providers/youtube"
@@ -69,6 +70,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("standings", standings.New)
 	reg.Register("onthisday", onthisday.New)
 	reg.Register("potd", potd.New)
+	reg.Register("spotify", spotify.New)
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 

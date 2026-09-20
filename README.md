@@ -34,10 +34,17 @@ Flags: `--config <path>` (default `~/.config/quarks/config.yaml`, or
 
 **Widget types:** `rss` (also covers YouTube channel feeds and the Reddit home
 feed via a secret URL), `hackernews`, `youtube` (channels + playlists), `reddit`,
-`weather`, `nhl` (a team's schedule). `type: group` bundles several widgets into
-one card with tabs. Secrets live in `secrets.yaml` next to the config
-(`chmod 600`), referenced as `${secret:key}` — see `secrets.example.yaml` and
-`config.example.yaml`.
+`weather`, `nhl` (a team's schedule), `standings`, `onthisday`, `potd`,
+`spotify` (upcoming releases from your followed artists — see Settings below).
+`type: group` bundles several widgets into one card with tabs. Secrets live in
+`secrets.yaml` next to the config (`chmod 600`), referenced as `${secret:key}`
+— see `secrets.example.yaml` and `config.example.yaml`.
+
+**Settings:** the gear icon in the header opens `/settings`, an in-app page for
+credential-backed integrations that need more than hand-editing YAML — right
+now that's connecting a Spotify account (OAuth happens in-window; it writes
+`secrets.yaml` for you and shows you the `config.yaml` block to paste in for
+the Media tab).
 
 **Keyboard:** `j` / `k` move between items, `Enter` opens the article inline
 (extracted reader view), `o` opens the original, `Esc` closes reader panels.
