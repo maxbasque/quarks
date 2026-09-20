@@ -173,13 +173,20 @@ func (c *Client) FollowedArtists(ctx context.Context, accessToken, after string)
 }
 
 // ArtistAlbums returns every album/single release for one artist — it follows
-// Spotify's pagination internally (an artist with more than one page of
-// releases is rare), so callers get the complete set in one call.
+// Spotify's pagination internally, so callers get the complete set in one call
+// regardless of page size.
+//
+// limit is 10, not the documented max of 50: verified live against a real
+// account (2026-09-20) that this endpoint 400s "Invalid limit" for any value
+// above 10 (11 already fails), even though /me/following's limit=50 is
+// accepted fine — the two endpoints don't share a cap in practice, docs
+// notwithstanding. A smaller page size just means more pages for artists with
+// a long catalog, which pagination already handles.
 func (c *Client) ArtistAlbums(ctx context.Context, accessToken, artistID string) ([]Album, error) {
 	var out []Album
 	endpoint := c.APIBase + "/artists/" + url.PathEscape(artistID) + "/albums?" + url.Values{
 		"include_groups": {"album,single"},
-		"limit":          {"50"},
+		"limit":          {"10"},
 	}.Encode()
 
 	for endpoint != "" {
