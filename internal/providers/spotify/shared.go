@@ -13,15 +13,19 @@ import (
 	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
 
-// pollInterval is how often the shared poller checks a slice of followed
-// artists. Small and frequent so a large follow list can be spread thin
-// rather than swept all at once, which is what would risk a rate limit.
+// pollInterval is the minimum gap enforced between two actual polls of a
+// slice of followed artists (see maybePoll) — not a ticker period. There is
+// no background goroutine; a poll only happens synchronously inside Fetch,
+// triggered by the widget's own TTL or a manual refresh click, so nothing
+// runs against Spotify's API while nobody's looking at the dashboard. This
+// floor is what stops two widgets sharing one *shared (an Albums tab and an
+// EPs tab), or repeated manual refresh clicks, from polling back-to-back.
 const pollInterval = 5 * time.Minute
 
 // rotationWindow is the target time for every followed artist to get checked
-// at least once. Release announcements don't need checking more often than
-// this, so this — not the widget's own TTL — is what actually governs
-// Spotify API call volume.
+// at least once, assuming Fetch is called at least every pollInterval. If
+// it's called less often (a longer widget TTL, or only manual refreshes), a
+// full pass just takes longer — still safe, never bursts.
 const rotationWindow = 24 * time.Hour
 
 // artistListTTL is how long the followed-artist list itself is trusted before
@@ -59,16 +63,15 @@ type snapshotItem struct {
 	class string // "album" | "eps" | "single"
 }
 
-// shared is one Spotify account's background release poller — one per
-// distinct refresh token, not one per widget instance. Two widgets (an Albums
-// tab and an EPs tab) reading the same account converge on the same *shared
-// via acquire, so they never double the API load between them. It survives
-// config reloads as long as the refresh token doesn't change: acquire()
-// re-finds the same instance by credential fingerprint, and startOnce makes
-// re-acquiring a no-op rather than restarting the poller. Only a genuine
-// reconnect (a new refresh token) creates a new one and abandons the old
-// goroutine+cache — an accepted, small leak for a single-user desktop app,
-// not worth a shutdown hook on core.Provider for this one case.
+// shared is one Spotify account's release cache — one per distinct refresh
+// token, not one per widget instance. Two widgets (an Albums tab and an EPs
+// tab) reading the same account converge on the same *shared via acquire, so
+// they never double the API load between them: whichever one's Fetch runs
+// first for a given poll window does the work, and pollMu/lastPollAt make the
+// other one's concurrent or follow-up call a no-op. The cache survives config
+// reloads as long as the refresh token doesn't change (acquire re-finds the
+// same instance by credential fingerprint); only a genuine reconnect (a new
+// refresh token) starts a fresh one.
 type shared struct {
 	client *spotifyapi.Client
 	creds  spotifyapi.Credentials
@@ -78,13 +81,14 @@ type shared struct {
 	tok    string
 	tokExp time.Time
 
+	pollMu     sync.Mutex // serializes maybePoll across concurrent Fetch calls
+	lastPollAt time.Time
+
 	mu               sync.RWMutex
 	releases         map[string]releaseEntry // spotify album ID -> raw facts
 	artists          []spotifyapi.Artist
 	artistsCheckedAt time.Time
 	cursor           int
-
-	startOnce sync.Once
 }
 
 var (
@@ -92,13 +96,14 @@ var (
 	shareds  = map[string]*shared{}
 )
 
-// acquire returns the shared poller for creds, creating and starting it on
-// first use. The map key is a hash of the refresh token, never the token
-// itself, so it's safe to keep in memory/logs.
+// acquire returns the shared cache for creds, creating it on first use. The
+// map key is a hash of the refresh token, never the token itself, so it's
+// safe to keep in memory/logs.
 func acquire(creds spotifyapi.Credentials, log *slog.Logger) *shared {
 	key := cacheKey(creds.RefreshToken)
 
 	sharedMu.Lock()
+	defer sharedMu.Unlock()
 	sh, ok := shareds[key]
 	if !ok {
 		sh = &shared{
@@ -109,9 +114,6 @@ func acquire(creds spotifyapi.Credentials, log *slog.Logger) *shared {
 		}
 		shareds[key] = sh
 	}
-	sharedMu.Unlock()
-
-	sh.startOnce.Do(func() { go sh.run() })
 	return sh
 }
 
@@ -120,14 +122,20 @@ func cacheKey(refreshToken string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *shared) run() {
-	ctx := context.Background()
-	s.pollSlice(ctx) // don't wait a full tick for the first data
-	t := time.NewTicker(pollInterval)
-	defer t.Stop()
-	for range t.C {
-		s.pollSlice(ctx)
+// maybePoll runs one poll (see pollSlice) if at least pollInterval has passed
+// since the last one, otherwise it's a no-op — the actual rate-limit floor.
+// Called synchronously from Fetch, so it shares Fetch's context deadline (the
+// scheduler wraps every widget Fetch in a 30s timeout); a rotation-sized
+// batch comfortably fits inside that.
+func (s *shared) maybePoll(ctx context.Context) {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
+
+	if !s.lastPollAt.IsZero() && time.Since(s.lastPollAt) < pollInterval {
+		return
 	}
+	s.lastPollAt = time.Now()
+	s.pollSlice(ctx)
 }
 
 // pollSlice refreshes the followed-artist list if it's stale, checks one
@@ -265,8 +273,8 @@ func (s *shared) prune() {
 }
 
 // snapshot returns every cached upcoming release classified as include
-// ("album" | "eps" | "single"), sorted soonest-first. No network call — the
-// background poller is what keeps the cache current.
+// ("album" | "eps" | "single"), sorted soonest-first. No network call itself
+// — call maybePoll first if the cache should be refreshed.
 func (s *shared) snapshot(include string, minEP, maxEP int) []snapshotItem {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

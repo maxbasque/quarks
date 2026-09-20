@@ -1,9 +1,10 @@
 // Package spotify surfaces upcoming releases from the widget owner's followed
 // Spotify artists, split into an "album" view and an "eps" view of the same
-// underlying data. The actual polling is owned by a shared, per-account
-// background poller (see shared.go) so that two widget instances reading the
-// same account never double the API load between them; Fetch itself never
-// hits the network.
+// underlying data. The release cache is owned by a shared, per-account object
+// (see shared.go) so that two widget instances reading the same account never
+// double the API load between them — there's no background goroutine; Fetch
+// polls a small, rate-limit-safe batch synchronously (gated by a minimum
+// interval), triggered by the widget's own TTL or a manual refresh click.
 package spotify
 
 import (
@@ -98,6 +99,7 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	if p.shared == nil {
 		return core.Payload{}, fmt.Errorf("spotify: not connected — connect Spotify from the Settings page")
 	}
+	p.shared.maybePoll(ctx)
 	snap := p.shared.snapshot(p.include, p.minEP, p.maxEP)
 	items := make([]core.Item, 0, len(snap))
 	for _, r := range snap {

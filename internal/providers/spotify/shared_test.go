@@ -1,7 +1,12 @@
 package spotify
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -225,5 +230,69 @@ func TestCacheKeyDedupesByRefreshToken(t *testing.T) {
 	}
 	if cacheKey("token-a") == cacheKey("token-b") {
 		t.Error("different refresh tokens should produce different cache keys")
+	}
+}
+
+// pollableTestShared builds a *shared wired to a fixture ArtistAlbums server,
+// with the followed-artist list and access token already warm — so
+// maybePoll's own pollSlice call only ever needs to hit the fixture's
+// /artists/.../albums route, isolating the test to maybePoll's gating logic.
+func pollableTestShared(t *testing.T, artistAlbumsHits *atomic.Int32) *shared {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		artistAlbumsHits.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{}, "next": nil})
+	}))
+	t.Cleanup(srv.Close)
+
+	client := spotifyapi.NewClient()
+	client.APIBase = srv.URL
+	return &shared{
+		client:           client,
+		log:              slog.Default(),
+		releases:         map[string]releaseEntry{},
+		artists:          []spotifyapi.Artist{{ID: "a1", Name: "Artist One"}},
+		artistsCheckedAt: time.Now(), // skip ensureArtists' network call
+		tok:              "at-1",     // skip accessToken's refresh call
+		tokExp:           time.Now().Add(time.Hour),
+	}
+}
+
+func TestMaybePollActuallyPolls(t *testing.T) {
+	var hits atomic.Int32
+	sh := pollableTestShared(t, &hits)
+
+	sh.maybePoll(context.Background())
+
+	if hits.Load() != 1 {
+		t.Errorf("expected 1 ArtistAlbums call, got %d", hits.Load())
+	}
+	if sh.lastPollAt.IsZero() {
+		t.Error("lastPollAt should be set after a poll")
+	}
+}
+
+func TestMaybePollSkipsWithinInterval(t *testing.T) {
+	var hits atomic.Int32
+	sh := pollableTestShared(t, &hits)
+
+	sh.maybePoll(context.Background())
+	sh.maybePoll(context.Background()) // immediately again — same tab or the other tab, or a double refresh click
+
+	if hits.Load() != 1 {
+		t.Errorf("expected the second call within pollInterval to be a no-op, got %d total calls", hits.Load())
+	}
+}
+
+func TestMaybePollPollsAgainAfterIntervalElapses(t *testing.T) {
+	var hits atomic.Int32
+	sh := pollableTestShared(t, &hits)
+
+	sh.maybePoll(context.Background())
+	sh.lastPollAt = time.Now().Add(-pollInterval - time.Second) // simulate time passing
+	sh.maybePoll(context.Background())
+
+	if hits.Load() != 2 {
+		t.Errorf("expected a second poll once pollInterval elapsed, got %d calls", hits.Load())
 	}
 }
