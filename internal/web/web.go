@@ -20,6 +20,7 @@ import (
 
 	"github.com/maxbasque/quarks/internal/core"
 	"github.com/maxbasque/quarks/internal/reader"
+	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
 
 //go:embed templates/*.html static
@@ -60,6 +61,10 @@ type Server struct {
 	metaGen     atomic.Uint64
 	tmpl        *template.Template
 
+	spotify             *spotifyapi.Client
+	spotifyPendingState atomic.Pointer[spotifyPending]
+	spotifyStatus       atomic.Pointer[spotifyStatus]
+
 	renderMu sync.Mutex
 	rendered atomic.Pointer[renderedIndex]
 }
@@ -72,7 +77,7 @@ type renderedIndex struct {
 	body              []byte
 }
 
-func NewServer(store *core.Store, refresh func(key string) bool, secretsPath string, reloadNow func() error) (*Server, error) {
+func NewServer(store *core.Store, refresh func(key string) bool, secretsPath string, reloadNow func() error, spotify *spotifyapi.Client) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"ago":   ago,
 		"temp":  temp,
@@ -82,7 +87,10 @@ func NewServer(store *core.Store, refresh func(key string) bool, secretsPath str
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, reader: reader.New(), refresh: refresh, secretsPath: secretsPath, reloadNow: reloadNow, tmpl: tmpl}
+	s := &Server{
+		store: store, reader: reader.New(), refresh: refresh,
+		secretsPath: secretsPath, reloadNow: reloadNow, spotify: spotify, tmpl: tmpl,
+	}
 	s.meta.Store(&Meta{Theme: "dark"})
 	return s, nil
 }
@@ -102,6 +110,10 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/refresh", s.handleRefresh)
 	mux.HandleFunc("/reader", s.handleReader)
 	mux.HandleFunc("/settings", s.handleSettings)
+	mux.HandleFunc("/settings/spotify/credentials", s.handleSpotifyCredentials)
+	mux.HandleFunc("/settings/spotify/authorize", s.handleSpotifyAuthorize)
+	mux.HandleFunc("/settings/spotify/callback", s.handleSpotifyCallback)
+	mux.HandleFunc("/settings/spotify/disconnect", s.handleSpotifyDisconnect)
 	mux.HandleFunc("/", s.handleIndex)
 	return mux
 }

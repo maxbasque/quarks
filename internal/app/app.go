@@ -25,6 +25,7 @@ import (
 	"github.com/maxbasque/quarks/internal/providers/standings"
 	"github.com/maxbasque/quarks/internal/providers/weather"
 	"github.com/maxbasque/quarks/internal/providers/youtube"
+	"github.com/maxbasque/quarks/internal/spotifyapi"
 	"github.com/maxbasque/quarks/internal/web"
 )
 
@@ -71,7 +72,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 
-	srv, err := web.NewServer(store, a.Refresh, config.SecretsPath(cfgPath), a.reloadNow)
+	srv, err := web.NewServer(store, a.Refresh, config.SecretsPath(cfgPath), a.reloadNow, spotifyapi.NewClient())
 	if err != nil {
 		return nil, err
 	}

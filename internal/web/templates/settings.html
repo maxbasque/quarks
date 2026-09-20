@@ -14,12 +14,47 @@
     </div>
     <h1 class="settings__title">Settings</h1>
 
-    {{ range .Integrations }}
     <section class="settings__card">
-      <h2 class="settings__card-title">{{ .Name }}</h2>
-      <p class="settings__status">{{ .Status }}</p>
+      <h2 class="settings__card-title">Spotify — upcoming releases</h2>
+      <p class="settings__status{{ if .Spotify.Connected }} settings__status--ok{{ end }}">{{ .Spotify.StatusLine }}</p>
+      {{ if .Spotify.Error }}<p class="settings__status settings__status--err">{{ .Spotify.Error }}</p>{{ end }}
+
+      <form method="post" action="/settings/spotify/credentials">
+        <div class="settings__field">
+          <label for="spotify_client_id">Client ID{{ if .Spotify.ClientIDSet }} (configured — leave blank to keep){{ end }}</label>
+          <input id="spotify_client_id" type="text" name="client_id" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="settings__field">
+          <label for="spotify_client_secret">Client Secret{{ if .Spotify.ClientSecretSet }} (configured — leave blank to keep){{ end }}</label>
+          <input id="spotify_client_secret" type="password" name="client_secret" autocomplete="off">
+        </div>
+        <button class="settings__btn" type="submit">Save</button>
+      </form>
+
+      <p class="settings__status">
+        Create an app at
+        <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a>
+        and register this exact redirect URI:
+      </p>
+      <p class="settings__snippet">{{ .Spotify.RedirectURI }}</p>
+
+      {{ if and .Spotify.ClientIDSet .Spotify.ClientSecretSet }}
+      <p>
+        <a class="settings__btn settings__btn--link" href="/settings/spotify/authorize">
+          {{ if .Spotify.Connected }}Reconnect{{ else }}Connect{{ end }} with Spotify
+        </a>
+      </p>
+      {{ end }}
+
+      {{ if .Spotify.Connected }}
+      <form method="post" action="/settings/spotify/disconnect">
+        <button class="settings__btn" type="submit">Disconnect</button>
+      </form>
+
+      <p class="settings__status">Add a Media tab by pasting this into <code>config.yaml</code>:</p>
+      <p class="settings__snippet">{{ .Spotify.MediaSnippet }}</p>
+      {{ end }}
     </section>
-    {{ end }}
   </div>
 </body>
 </html>
