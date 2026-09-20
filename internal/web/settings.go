@@ -16,6 +16,10 @@ const spotifyScope = "user-follow-read"
 // mediaSnippet is the config.yaml block a connected user pastes in to get the
 // Media tab — connecting only ever writes secrets.yaml (like every other
 // integration in this app), it never edits config.yaml on the user's behalf.
+// The three client_id/client_secret/refresh_token fields use the same
+// ${secret:...} substitution every other credential-backed widget already
+// uses (see reddit_home in config.example.yaml) — core.Provider only ever
+// sees a WidgetConfig, so this is how it reaches the credentials at all.
 const mediaSnippet = `- name: Media
   columns: 1
   widgets:
@@ -23,8 +27,20 @@ const mediaSnippet = `- name: Media
       title: Music
       column: 1
       tabs:
-        - { title: Albums, type: spotify, include: album, ttl: 15m }
-        - { title: EPs,    type: spotify, include: eps,   ttl: 15m }`
+        - title: Albums
+          type: spotify
+          include: album
+          ttl: 15m
+          client_id: "${secret:spotify_client_id}"
+          client_secret: "${secret:spotify_client_secret}"
+          refresh_token: "${secret:spotify_refresh_token}"
+        - title: EPs
+          type: spotify
+          include: eps
+          ttl: 15m
+          client_id: "${secret:spotify_client_id}"
+          client_secret: "${secret:spotify_client_secret}"
+          refresh_token: "${secret:spotify_refresh_token}"`
 
 // spotifyPending is an in-flight authorize->callback round trip. Single-user,
 // one flow at a time, so a single slot on Server is enough — no session store.
