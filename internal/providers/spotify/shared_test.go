@@ -6,224 +6,90 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/maxbasque/quarks/internal/musicbrainz"
 	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
 
 func TestClassify(t *testing.T) {
 	cases := []struct {
-		name        string
-		albumType   string
-		totalTracks int
-		want        string
+		primary   string
+		secondary []string
+		want      string
 	}{
-		{"album type always wins", "album", 1, "album"},
-		{"album type wins even with many tracks", "album", 20, "album"},
-		{"1 track is a single", "single", 1, "single"},
-		{"2 tracks is a single", "single", 2, "single"},
-		{"3 tracks is an EP", "single", 3, "eps"},
-		{"7 tracks is an EP", "single", 7, "eps"},
-		{"8 tracks falls back to album", "single", 8, "album"},
+		{"Album", nil, "album"},
+		{"Album", []string{"Live"}, "album"},
+		{"Album", []string{"Soundtrack"}, "album"},
+		{"EP", nil, "eps"},
+		{"Single", nil, ""},
+		{"Broadcast", nil, ""},
+		{"", nil, ""},
+		{"Album", []string{"Compilation"}, ""},
+		{"EP", []string{"Remix"}, ""},
+		{"Album", []string{"DJ-mix"}, ""},
 	}
 	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			al := spotifyapi.Album{AlbumType: c.albumType, TotalTracks: c.totalTracks}
-			if got := classify(al, 3, 7); got != c.want {
-				t.Errorf("classify(%s, %d tracks) = %q, want %q", c.albumType, c.totalTracks, got, c.want)
-			}
-		})
-	}
-}
-
-func TestClassifyCustomThresholds(t *testing.T) {
-	al := spotifyapi.Album{AlbumType: "single", TotalTracks: 4}
-	if got := classify(al, 5, 9); got != "album" {
-		t.Errorf("with a raised minEP, 4 tracks should fall back to album, got %q", got)
-	}
-}
-
-func TestRotationSize(t *testing.T) {
-	cases := []struct {
-		total int
-		want  int
-	}{
-		{0, 0},
-		{1, 1},
-		{14, 14},
-		{15, 15}, // exactly at the cap: still the whole (small) list
-		{16, 15},
-		{226, 15}, // the real follow count this was tuned against
-		{1000, 15},
-	}
-	for _, c := range cases {
-		if got := rotationSize(c.total); got != c.want {
-			t.Errorf("rotationSize(%d) = %d, want %d", c.total, got, c.want)
+		rg := musicbrainz.ReleaseGroup{PrimaryType: c.primary, SecondaryTypes: c.secondary}
+		if got := classify(rg); got != c.want {
+			t.Errorf("classify(%s %v) = %q, want %q", c.primary, c.secondary, got, c.want)
 		}
 	}
 }
 
 func TestParseReleaseDate(t *testing.T) {
 	cases := []struct {
-		date, precision string
-		want            string // formatted 2006-01-02 if ok
-		ok              bool
+		in, want, precision string
+		ok                  bool
 	}{
-		{"2026-11-13", "day", "2026-11-13", true},
-		{"2026-11", "month", "2026-11-01", true},
-		{"2026", "year", "2026-01-01", true},
-		{"not-a-date", "day", "", false},
+		{"2026-11-13", "2026-11-13", "day", true},
+		{"2026-11", "2026-11-01", "month", true},
+		{"2026", "2026-01-01", "year", true},
+		{"", "", "", false},
+		{"garbage", "", "", false},
 	}
 	for _, c := range cases {
-		got, ok := parseReleaseDate(c.date, c.precision)
-		if ok != c.ok {
-			t.Fatalf("parseReleaseDate(%q,%q) ok=%v, want %v", c.date, c.precision, ok, c.ok)
+		got, precision, ok := parseReleaseDate(c.in)
+		if ok != c.ok || precision != c.precision {
+			t.Fatalf("parseReleaseDate(%q) = _, %q, %v", c.in, precision, ok)
 		}
 		if ok && got.Format("2006-01-02") != c.want {
-			t.Errorf("parseReleaseDate(%q,%q) = %v, want %s", c.date, c.precision, got, c.want)
+			t.Errorf("parseReleaseDate(%q) = %v, want %s", c.in, got, c.want)
 		}
 	}
 }
 
-func newTestShared() *shared {
-	return &shared{
-		client:   spotifyapi.NewClient(),
-		log:      slog.Default(),
-		releases: map[string]releaseEntry{},
+func TestUpcoming(t *testing.T) {
+	now := time.Date(2026, 9, 26, 15, 0, 0, 0, time.Local)
+	d := func(s string) (time.Time, string) {
+		t, p, _ := parseReleaseDate(s)
+		return t, p
+	}
+	cases := []struct {
+		date string
+		want bool
+	}{
+		{"2026-09-27", true},
+		{"2026-09-26", true}, // out today: still shown until the day is over
+		{"2026-09-25", false},
+		{"2026-09", true}, // "sometime this month"
+		{"2026-10", true},
+		{"2026-08", false},
+		{"2026", false}, // a bare current year is usually an undated catalog entry
+		{"2027", true},
+	}
+	for _, c := range cases {
+		start, p := d(c.date)
+		if got := upcoming(start, p, now); got != c.want {
+			t.Errorf("upcoming(%s) = %v, want %v", c.date, got, c.want)
+		}
 	}
 }
 
-func TestIngestKeepsOnlyUpcoming(t *testing.T) {
-	sh := newTestShared()
-	future := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
-	past := time.Now().AddDate(0, 0, -10).Format("2006-01-02")
-
-	sh.ingest("Artist", []spotifyapi.Album{
-		{ID: "upcoming", Name: "Upcoming", ReleaseDate: future, ReleaseDatePrecision: "day"},
-		{ID: "past", Name: "Past", ReleaseDate: past, ReleaseDatePrecision: "day"},
-		{ID: "bad-date", Name: "Bad", ReleaseDate: "garbage", ReleaseDatePrecision: "day"},
-	})
-
-	sh.mu.RLock()
-	defer sh.mu.RUnlock()
-	if len(sh.releases) != 1 {
-		t.Fatalf("got %d cached releases, want 1: %+v", len(sh.releases), sh.releases)
-	}
-	if _, ok := sh.releases["upcoming"]; !ok {
-		t.Error("upcoming release should be cached")
-	}
-}
-
-func TestIngestFillsArtistNameWhenAlbumOmitsIt(t *testing.T) {
-	sh := newTestShared()
-	future := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
-	sh.ingest("Fallback Artist", []spotifyapi.Album{
-		{ID: "a1", Name: "X", ReleaseDate: future, ReleaseDatePrecision: "day"},
-	})
-	sh.mu.RLock()
-	defer sh.mu.RUnlock()
-	if sh.releases["a1"].album.ArtistName != "Fallback Artist" {
-		t.Errorf("ArtistName = %q", sh.releases["a1"].album.ArtistName)
-	}
-}
-
-func TestIngestThenReIngestPastDateRemovesIt(t *testing.T) {
-	sh := newTestShared()
-	future := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
-	sh.ingest("Artist", []spotifyapi.Album{{ID: "a1", Name: "X", ReleaseDate: future, ReleaseDatePrecision: "day"}})
-
-	past := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
-	sh.ingest("Artist", []spotifyapi.Album{{ID: "a1", Name: "X", ReleaseDate: past, ReleaseDatePrecision: "day"}})
-
-	sh.mu.RLock()
-	defer sh.mu.RUnlock()
-	if _, ok := sh.releases["a1"]; ok {
-		t.Error("a release that's no longer upcoming should be dropped on re-ingest")
-	}
-}
-
-func TestPruneDropsPastReleasesRegardlessOfWhichArtist(t *testing.T) {
-	sh := newTestShared()
-	// Simulate a release that was upcoming when cached but whose date has
-	// since passed, without going through ingest (which would filter it) —
-	// this is exactly what prune exists to clean up on other artists' ticks.
-	sh.releases["a1"] = releaseEntry{
-		album: spotifyapi.Album{ID: "a1", Name: "Old"},
-		date:  time.Now().Add(-time.Hour),
-	}
-	sh.releases["a2"] = releaseEntry{
-		album: spotifyapi.Album{ID: "a2", Name: "Future"},
-		date:  time.Now().Add(24 * time.Hour),
-	}
-
-	sh.prune()
-
-	sh.mu.RLock()
-	defer sh.mu.RUnlock()
-	if _, ok := sh.releases["a1"]; ok {
-		t.Error("past release should have been pruned")
-	}
-	if _, ok := sh.releases["a2"]; !ok {
-		t.Error("future release should survive prune")
-	}
-}
-
-func TestSnapshotFiltersByClassAndSortsByDate(t *testing.T) {
-	sh := newTestShared()
-	now := time.Now()
-	sh.releases["album-1"] = releaseEntry{
-		album: spotifyapi.Album{ID: "album-1", Name: "Later Album", AlbumType: "album", TotalTracks: 10},
-		date:  now.Add(48 * time.Hour),
-	}
-	sh.releases["ep-1"] = releaseEntry{
-		album: spotifyapi.Album{ID: "ep-1", Name: "Soon EP", AlbumType: "single", TotalTracks: 5},
-		date:  now.Add(24 * time.Hour),
-	}
-	sh.releases["single-1"] = releaseEntry{
-		album: spotifyapi.Album{ID: "single-1", Name: "A Single", AlbumType: "single", TotalTracks: 1},
-		date:  now.Add(12 * time.Hour),
-	}
-
-	albums := sh.snapshot("album", 3, 7)
-	if len(albums) != 1 || albums[0].album.ID != "album-1" {
-		t.Errorf("album snapshot = %+v", albums)
-	}
-
-	eps := sh.snapshot("eps", 3, 7)
-	if len(eps) != 1 || eps[0].album.ID != "ep-1" {
-		t.Errorf("eps snapshot = %+v", eps)
-	}
-
-	singles := sh.snapshot("single", 3, 7)
-	if len(singles) != 1 || singles[0].album.ID != "single-1" {
-		t.Errorf("singles should still be classifiable even though no widget requests them: %+v", singles)
-	}
-}
-
-func TestSnapshotSortsSoonestFirst(t *testing.T) {
-	sh := newTestShared()
-	now := time.Now()
-	sh.releases["later"] = releaseEntry{
-		album: spotifyapi.Album{ID: "later", AlbumType: "album"},
-		date:  now.Add(72 * time.Hour),
-	}
-	sh.releases["sooner"] = releaseEntry{
-		album: spotifyapi.Album{ID: "sooner", AlbumType: "album"},
-		date:  now.Add(6 * time.Hour),
-	}
-
-	out := sh.snapshot("album", 3, 7)
-	if len(out) != 2 || out[0].album.ID != "sooner" || out[1].album.ID != "later" {
-		t.Errorf("expected sooner-first order, got %+v", out)
-	}
-}
-
-// Deliberately not testing acquire() itself here: it starts a real background
-// goroutine (run) that would hit the live Spotify API, which has no place in
-// an offline unit test. cacheKey is the actual thing two Factory calls need
-// to agree on to converge on the same *shared, so that's what's under test.
 func TestCacheKeyDedupesByRefreshToken(t *testing.T) {
 	if cacheKey("same-token") != cacheKey("same-token") {
 		t.Error("identical refresh tokens should produce the same cache key")
@@ -233,66 +99,252 @@ func TestCacheKeyDedupesByRefreshToken(t *testing.T) {
 	}
 }
 
-// pollableTestShared builds a *shared wired to a fixture ArtistAlbums server,
-// with the followed-artist list and access token already warm — so
-// maybePoll's own pollSlice call only ever needs to hit the fixture's
-// /artists/.../albums route, isolating the test to maybePoll's gating logic.
-func pollableTestShared(t *testing.T, artistAlbumsHits *atomic.Int32) *shared {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		artistAlbumsHits.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"items": []map[string]any{}, "next": nil})
-	}))
-	t.Cleanup(srv.Close)
+// newTestShared returns a *shared that never touches the network: lastPollAt
+// is "just now", so maybePoll is a no-op for pollInterval.
+func newTestShared() *shared {
+	sh := newShared(spotifyapi.NewClient(), musicbrainz.NewClient(), slog.Default())
+	sh.lastPollAt = wallNow()
+	return sh
+}
 
-	client := spotifyapi.NewClient()
-	client.APIBase = srv.URL
-	return &shared{
-		client:           client,
-		log:              slog.Default(),
-		releases:         map[string]releaseEntry{},
-		artists:          []spotifyapi.Artist{{ID: "a1", Name: "Artist One"}},
-		artistsCheckedAt: time.Now(), // skip ensureArtists' network call
-		tok:              "at-1",     // skip accessToken's refresh call
-		tokExp:           time.Now().Add(time.Hour),
+func entry(id, class, date string) releaseEntry {
+	t, p, _ := parseReleaseDate(date)
+	return releaseEntry{rg: musicbrainz.ReleaseGroup{ID: id, Title: id, ArtistCredit: "Artist " + id}, date: t, precision: p, class: class}
+}
+
+func TestSnapshotFiltersByClassAndSortsSoonestFirst(t *testing.T) {
+	sh := newTestShared()
+	later := time.Now().AddDate(0, 0, 20).Format("2006-01-02")
+	sooner := time.Now().AddDate(0, 0, 5).Format("2006-01-02")
+	sh.releases["later"] = entry("later", "album", later)
+	sh.releases["sooner"] = entry("sooner", "album", sooner)
+	sh.releases["ep"] = entry("ep", "eps", sooner)
+
+	albums := sh.snapshot("album")
+	if len(albums) != 2 || albums[0].rg.ID != "sooner" || albums[1].rg.ID != "later" {
+		t.Errorf("albums = %+v", albums)
+	}
+	if eps := sh.snapshot("eps"); len(eps) != 1 || eps[0].rg.ID != "ep" {
+		t.Errorf("eps = %+v", eps)
 	}
 }
 
-func TestMaybePollActuallyPolls(t *testing.T) {
-	var hits atomic.Int32
-	sh := pollableTestShared(t, &hits)
-
-	sh.maybePoll(context.Background())
-
-	if hits.Load() != 1 {
-		t.Errorf("expected 1 ArtistAlbums call, got %d", hits.Load())
+func TestPruneDropsReleasesThatHavePassed(t *testing.T) {
+	sh := newTestShared()
+	sh.releases["past"] = entry("past", "album", time.Now().AddDate(0, 0, -2).Format("2006-01-02"))
+	sh.releases["future"] = entry("future", "album", time.Now().AddDate(0, 0, 2).Format("2006-01-02"))
+	sh.prune()
+	if _, ok := sh.releases["past"]; ok {
+		t.Error("past release should have been pruned")
 	}
-	if sh.lastPollAt.IsZero() {
-		t.Error("lastPollAt should be set after a poll")
+	if _, ok := sh.releases["future"]; !ok {
+		t.Error("future release should survive prune")
+	}
+}
+
+// fixture fakes both Spotify's Web API and MusicBrainz for a full poll.
+type fixture struct {
+	mu            sync.Mutex
+	spotifyHits   atomic.Int32
+	spotifyStatus int // non-zero: every Spotify request fails with it
+	retryAfter    string
+	mbStatus      int // non-zero: every release-group query fails with it
+	queries       []string
+	nameSearches  []string
+}
+
+func (f *fixture) shared(t *testing.T) *shared {
+	t.Helper()
+	sp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.spotifyHits.Add(1)
+		if f.spotifyStatus != 0 {
+			if f.retryAfter != "" {
+				w.Header().Set("Retry-After", f.retryAfter)
+			}
+			w.WriteHeader(f.spotifyStatus)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"artists": map[string]any{
+			"items": []map[string]any{
+				{"id": "sp1", "name": "One"}, {"id": "sp2", "name": "Two"}, {"id": "sp3", "name": "Three"},
+			},
+			"cursors": map[string]any{"after": ""},
+		}})
+	}))
+	t.Cleanup(sp.Close)
+
+	future := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
+	past := time.Now().AddDate(0, 0, -10).Format("2006-01-02")
+	nextMonth := time.Now().AddDate(0, 1, 0).Format("2006-01")
+	mb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		switch r.URL.Path {
+		case "/url":
+			_ = json.NewEncoder(w).Encode(map[string]any{"urls": []map[string]any{{
+				"resource":  "https://open.spotify.com/artist/sp1",
+				"relations": []map[string]any{{"target-type": "artist", "artist": map[string]any{"id": "mb1"}}},
+			}}})
+		case "/artist":
+			q := r.URL.Query().Get("query")
+			f.nameSearches = append(f.nameSearches, q)
+			var artists []map[string]any
+			if strings.Contains(q, "Two") {
+				artists = append(artists, map[string]any{"id": "mb2", "name": "Two"})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"artists": artists})
+		case "/release-group":
+			f.queries = append(f.queries, r.URL.Query().Get("query"))
+			if f.mbStatus != 0 {
+				w.WriteHeader(f.mbStatus)
+				return
+			}
+			rg := func(id, typ, date string) map[string]any {
+				return map[string]any{"id": id, "title": id, "primary-type": typ, "first-release-date": date,
+					"artist-credit": []map[string]any{{"name": "One", "artist": map[string]any{"id": "mb1"}}}}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"count": 4, "release-groups": []map[string]any{
+				rg("album", "Album", future), rg("ep", "EP", nextMonth),
+				rg("single", "Single", future), rg("old", "Album", past),
+			}})
+		default:
+			t.Errorf("unexpected MusicBrainz path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(mb.Close)
+
+	client := spotifyapi.NewClient()
+	client.APIBase = sp.URL
+	mbc := musicbrainz.NewClient()
+	mbc.Base = mb.URL
+	mbc.Spacing = 0
+	mbc.RetryWaits = nil
+	sh := newShared(client, mbc, slog.Default())
+	sh.tok, sh.tokExp = "at-1", wallNow().Add(time.Hour) // skip the token refresh
+	return sh
+}
+
+func TestPollEndToEnd(t *testing.T) {
+	f := &fixture{}
+	sh := f.shared(t)
+
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Fatalf("maybePoll: %v", err)
+	}
+	if got := sh.snapshot("album"); len(got) != 1 || got[0].rg.ID != "album" {
+		t.Errorf("albums = %+v (singles and past records must be dropped)", got)
+	}
+	if got := sh.snapshot("eps"); len(got) != 1 || got[0].rg.ID != "ep" || got[0].precision != "month" {
+		t.Errorf("eps = %+v", got)
+	}
+	if sh.mbids["sp1"] != "mb1" || sh.mbids["sp2"] != "mb2" || sh.mbids["sp3"] != "" {
+		t.Errorf("mbids = %v, want sp1 by link, sp2 by name, sp3 unmatched", sh.mbids)
+	}
+	if len(f.queries) != 1 || !strings.Contains(f.queries[0], "arid:mb1") {
+		t.Errorf("first sweep queries = %v", f.queries)
+	}
+
+	// Next poll: the name-matched artist makes a sweep due right away, and
+	// the unmatched one isn't searched again so soon.
+	sh.lastPollAt = wallNow().Add(-pollInterval - time.Second)
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Fatalf("second maybePoll: %v", err)
+	}
+	if len(f.queries) != 2 || !strings.Contains(f.queries[1], "arid:mb2") {
+		t.Errorf("second sweep should include the newly mapped artist: %v", f.queries)
+	}
+	if len(f.nameSearches) != 2 {
+		t.Errorf("name searches = %v, want Two and Three once each", f.nameSearches)
+	}
+	if f.spotifyHits.Load() != 1 {
+		t.Errorf("followed artists should be fetched once a day, got %d Spotify requests", f.spotifyHits.Load())
+	}
+
+	// Third poll: nothing due, so MusicBrainz isn't touched at all.
+	sh.lastPollAt = wallNow().Add(-pollInterval - time.Second)
+	_ = sh.maybePoll(context.Background())
+	if len(f.queries) != 2 {
+		t.Errorf("no sweep should run before sweepInterval, got %d queries", len(f.queries))
 	}
 }
 
 func TestMaybePollSkipsWithinInterval(t *testing.T) {
-	var hits atomic.Int32
-	sh := pollableTestShared(t, &hits)
-
-	sh.maybePoll(context.Background())
-	sh.maybePoll(context.Background()) // immediately again — same tab or the other tab, or a double refresh click
-
-	if hits.Load() != 1 {
-		t.Errorf("expected the second call within pollInterval to be a no-op, got %d total calls", hits.Load())
+	f := &fixture{}
+	sh := f.shared(t)
+	_ = sh.maybePoll(context.Background())
+	_ = sh.maybePoll(context.Background()) // the other tab, or a double refresh click
+	if f.spotifyHits.Load() != 1 || len(f.queries) != 1 {
+		t.Errorf("second call within pollInterval must be a no-op: %d spotify, %d mb", f.spotifyHits.Load(), len(f.queries))
 	}
 }
 
-func TestMaybePollPollsAgainAfterIntervalElapses(t *testing.T) {
-	var hits atomic.Int32
-	sh := pollableTestShared(t, &hits)
+func TestFailedSweepKeepsLastGoodReleases(t *testing.T) {
+	f := &fixture{}
+	sh := f.shared(t)
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
-	sh.maybePoll(context.Background())
-	sh.lastPollAt = time.Now().Add(-pollInterval - time.Second) // simulate time passing
-	sh.maybePoll(context.Background())
+	f.mbStatus = http.StatusInternalServerError
+	sh.sweepDue = true
+	sh.lastPollAt = wallNow().Add(-pollInterval - time.Second)
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Errorf("a failed re-sweep shouldn't error while last sweep's data is still shown: %v", err)
+	}
+	if len(sh.snapshot("album")) != 1 {
+		t.Error("the previous sweep's releases should be kept")
+	}
+}
 
-	if hits.Load() != 2 {
-		t.Errorf("expected a second poll once pollInterval elapsed, got %d calls", hits.Load())
+func TestFirstSweepFailureIsReported(t *testing.T) {
+	f := &fixture{mbStatus: http.StatusServiceUnavailable}
+	sh := f.shared(t)
+	if err := sh.maybePoll(context.Background()); err == nil {
+		t.Error("with nothing ever fetched, a MusicBrainz failure must surface")
+	}
+}
+
+func TestSpotify429BlocksSpotifyUntilRetryAfter(t *testing.T) {
+	f := &fixture{spotifyStatus: http.StatusTooManyRequests, retryAfter: "74442"}
+	sh := f.shared(t)
+
+	if err := sh.maybePoll(context.Background()); err == nil {
+		t.Fatal("no artist list at all should be an error")
+	}
+	if d := time.Until(sh.blockedUntil); d < 20*time.Hour {
+		t.Errorf("blockedUntil should honor Retry-After, only %s away", d)
+	}
+
+	sh.lastPollAt = wallNow().Add(-pollInterval - time.Second)
+	_ = sh.maybePoll(context.Background())
+	if f.spotifyHits.Load() != 1 {
+		t.Errorf("no Spotify request may be made while blocked, got %d", f.spotifyHits.Load())
+	}
+}
+
+func TestSpotify401DropsCachedToken(t *testing.T) {
+	f := &fixture{spotifyStatus: http.StatusUnauthorized}
+	sh := f.shared(t)
+	_ = sh.maybePoll(context.Background())
+	if sh.tok != "" {
+		t.Error("a rejected access token should be dropped so the next poll refreshes it")
+	}
+}
+
+func TestStaleArtistListStillUsedWhenSpotifyFails(t *testing.T) {
+	f := &fixture{}
+	sh := f.shared(t)
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	f.spotifyStatus = http.StatusInternalServerError
+	sh.artistsCheckedAt = wallNow().Add(-artistListTTL - time.Hour)
+	sh.lastPollAt = wallNow().Add(-pollInterval - time.Second)
+	if err := sh.maybePoll(context.Background()); err != nil {
+		t.Errorf("yesterday's artist list is good enough, got %v", err)
+	}
+	if len(sh.artists) != 3 {
+		t.Errorf("artists = %d, want the previous 3 kept", len(sh.artists))
 	}
 }

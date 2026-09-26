@@ -1,7 +1,9 @@
 // Package spotifyapi is a thin, dependency-free client for the pieces of
 // Spotify's accounts/Web API this app needs: the confidential-client
-// Authorization Code OAuth flow, the current user's identity, their followed
-// artists, and one artist's albums. It knows nothing about core.Provider or
+// Authorization Code OAuth flow, the current user's identity, and their
+// followed artists. Release data comes from MusicBrainz instead (see
+// internal/musicbrainz): Spotify's catalog rarely lists a record before it's
+// out, and polling it per artist is what got this app rate limited. It knows nothing about core.Provider or
 // the HTTP settings handlers — both depend on this package, not the other way
 // around, so it stays independently testable.
 package spotifyapi
@@ -9,6 +11,7 @@ package spotifyapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,23 +35,6 @@ type Credentials struct {
 type Artist struct {
 	ID   string
 	Name string
-}
-
-// Album is one release from ArtistAlbums. AlbumType is Spotify's own
-// "album" | "single" | "compilation" — Spotify has no separate "EP" type;
-// callers that want to distinguish EPs from singles do it themselves (e.g. by
-// TotalTracks). ReleaseDate's precision varies (a pre-announced future album
-// may only carry a year) — see ReleaseDatePrecision ("year" | "month" | "day").
-type Album struct {
-	ID                   string
-	Name                 string
-	AlbumType            string
-	TotalTracks          int
-	ReleaseDate          string
-	ReleaseDatePrecision string
-	ImageURL             string
-	URL                  string
-	ArtistName           string
 }
 
 // Client talks to Spotify's accounts + Web API. AuthBase/APIBase are
@@ -172,113 +158,27 @@ func (c *Client) FollowedArtists(ctx context.Context, accessToken, after string)
 	return artists, page.Artists.Cursors.After, nil
 }
 
-// ArtistAlbums returns every album/single release for one artist — it follows
-// Spotify's pagination internally, so callers get the complete set in one call
-// regardless of page size.
-//
-// limit is 10, not the documented max of 50: verified live against a real
-// account (2026-09-20) that this endpoint 400s "Invalid limit" for any value
-// above 10 (11 already fails), even though /me/following's limit=50 is
-// accepted fine — the two endpoints don't share a cap in practice, docs
-// notwithstanding. A smaller page size just means more pages for artists with
-// a long catalog, which pagination already handles.
-func (c *Client) ArtistAlbums(ctx context.Context, accessToken, artistID string) ([]Album, error) {
-	var out []Album
-	endpoint := c.APIBase + "/artists/" + url.PathEscape(artistID) + "/albums?" + url.Values{
-		"include_groups": {"album,single"},
-		"limit":          {"10"},
-	}.Encode()
-
-	for endpoint != "" {
-		var page struct {
-			Items []struct {
-				ID                   string `json:"id"`
-				Name                 string `json:"name"`
-				AlbumType            string `json:"album_type"`
-				TotalTracks          int    `json:"total_tracks"`
-				ReleaseDate          string `json:"release_date"`
-				ReleaseDatePrecision string `json:"release_date_precision"`
-				Images               []struct {
-					URL string `json:"url"`
-				} `json:"images"`
-				ExternalURLs struct {
-					Spotify string `json:"spotify"`
-				} `json:"external_urls"`
-				Artists []struct {
-					Name string `json:"name"`
-				} `json:"artists"`
-			} `json:"items"`
-			Next string `json:"next"`
-		}
-		if err := c.getJSONWithRetry(ctx, accessToken, endpoint, &page); err != nil {
-			return nil, err
-		}
-		for _, it := range page.Items {
-			al := Album{
-				ID:                   it.ID,
-				Name:                 it.Name,
-				AlbumType:            it.AlbumType,
-				TotalTracks:          it.TotalTracks,
-				ReleaseDate:          it.ReleaseDate,
-				ReleaseDatePrecision: it.ReleaseDatePrecision,
-				URL:                  it.ExternalURLs.Spotify,
-			}
-			if len(it.Images) > 0 {
-				al.ImageURL = it.Images[0].URL
-			}
-			if len(it.Artists) > 0 {
-				al.ArtistName = it.Artists[0].Name
-			}
-			out = append(out, al)
-		}
-		endpoint = page.Next
-	}
-	return out, nil
-}
-
-// getJSON does an authenticated GET with no retry — used for cheap, low-volume
-// calls (WhoAmI, FollowedArtists) where hitting a 429 would be unusual.
+// getJSON does an authenticated GET. There's deliberately no inline retry:
+// a 429 comes back as a *RateLimitedError for the caller to honor across
+// polls (see the provider's blockedUntil).
 func (c *Client) getJSON(ctx context.Context, accessToken, endpoint string, v any) error {
 	return c.doGET(ctx, accessToken, endpoint, v)
 }
 
-// getJSONWithRetry does an authenticated GET, retrying once after Spotify's
-// Retry-After delay on a 429 — ArtistAlbums is called once per followed
-// artist per rotation, so it's the one call shape actually likely to be
-// rate-limited.
-func (c *Client) getJSONWithRetry(ctx context.Context, accessToken, endpoint string, v any) error {
-	err := c.doGET(ctx, accessToken, endpoint, v)
-	var rl *rateLimitedError
-	if !asRateLimited(err, &rl) {
-		return err
-	}
-	wait := rl.RetryAfter
-	if wait > 60*time.Second {
-		wait = 60 * time.Second
-	}
-	select {
-	case <-time.After(wait):
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return c.doGET(ctx, accessToken, endpoint, v)
-}
-
-type rateLimitedError struct {
+// RateLimitedError is a 429 from the Web API. RetryAfter is Spotify's own
+// Retry-After — which can be many hours once an app has been flagged, not
+// just the few seconds of the rolling-window limit.
+type RateLimitedError struct {
 	RetryAfter time.Duration
 }
 
-func (e *rateLimitedError) Error() string {
+func (e *RateLimitedError) Error() string {
 	return fmt.Sprintf("spotify: rate limited, retry after %s", e.RetryAfter)
 }
 
-func asRateLimited(err error, target **rateLimitedError) bool {
-	rl, ok := err.(*rateLimitedError)
-	if ok {
-		*target = rl
-	}
-	return ok
-}
+// ErrUnauthorized wraps a 401 from the Web API — the access token was
+// rejected (expired or revoked), so the caller should drop any cached one.
+var ErrUnauthorized = errors.New("spotify: access token rejected")
 
 func (c *Client) doGET(ctx context.Context, accessToken, endpoint string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -298,10 +198,13 @@ func (c *Client) doGET(ctx context.Context, accessToken, endpoint string, v any)
 		if err != nil || secs < 0 {
 			secs = 5 // no usable Retry-After header — a conservative guess
 		}
-		return &rateLimitedError{RetryAfter: time.Duration(secs) * time.Second}
+		return &RateLimitedError{RetryAfter: time.Duration(secs) * time.Second}
 	}
 
 	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("%w: http 401 on %s: %s", ErrUnauthorized, endpoint, trim(body))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("spotify: http %d on %s: %s", resp.StatusCode, endpoint, trim(body))
 	}

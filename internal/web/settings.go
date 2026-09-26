@@ -25,24 +25,13 @@ const spotifyScope = "user-follow-read"
 const mediaSnippet = `- name: Media
   columns: 1
   widgets:
-    - type: group
-      title: Music
+    - type: spotify
+      title: Upcoming releases
       column: 1
-      tabs:
-        - title: Albums
-          type: spotify
-          include: album
-          ttl: 15m
-          client_id: "${secret:spotify_client_id}"
-          client_secret: "${secret:spotify_client_secret}"
-          refresh_token: "${secret:spotify_refresh_token}"
-        - title: EPs
-          type: spotify
-          include: eps
-          ttl: 15m
-          client_id: "${secret:spotify_client_id}"
-          client_secret: "${secret:spotify_client_secret}"
-          refresh_token: "${secret:spotify_refresh_token}"`
+      ttl: 15m
+      client_id: "${secret:spotify_client_id}"
+      client_secret: "${secret:spotify_client_secret}"
+      refresh_token: "${secret:spotify_refresh_token}"`
 
 // spotifyPending is an in-flight authorize->callback round trip. Single-user,
 // one flow at a time, so a single slot on Server is enough — no session store.

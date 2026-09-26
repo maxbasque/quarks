@@ -2,13 +2,13 @@ package spotify
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/maxbasque/quarks/internal/core"
-	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
 
 func widgetConfig(t *testing.T, src string) core.WidgetConfig {
@@ -61,58 +61,36 @@ func TestParseSettingsRejectsBadInclude(t *testing.T) {
 	}
 }
 
-func TestParseSettingsRejectsInvertedThresholds(t *testing.T) {
-	_, err := parseSettings(widgetConfig(t, "type: spotify\ntitle: X\ninclude: eps\n"+
-		"ep_min_tracks: 8\nep_max_tracks: 3\n"+
-		"client_id: cid\nclient_secret: cs\nrefresh_token: rt\n"))
-	if err == nil {
-		t.Fatal("expected an error when ep_min_tracks > ep_max_tracks")
-	}
-}
-
 func TestParseSettingsDefaults(t *testing.T) {
 	p, err := parseSettings(widgetConfig(t, "type: spotify\ntitle: X\n"+
 		"client_id: cid\nclient_secret: cs\nrefresh_token: rt\n"))
 	if err != nil {
 		t.Fatalf("parseSettings: %v", err)
 	}
-	if p.include != "album" {
-		t.Errorf("include = %q, want album (default)", p.include)
-	}
-	if p.minEP != 3 || p.maxEP != 7 {
-		t.Errorf("minEP/maxEP = %d/%d, want 3/7 (defaults)", p.minEP, p.maxEP)
+	if p.include != "all" {
+		t.Errorf("include = %q, want all (default)", p.include)
 	}
 }
 
-func TestParseSettingsHonorsCustomThresholds(t *testing.T) {
-	p, err := parseSettings(widgetConfig(t, "type: spotify\ntitle: X\ninclude: eps\n"+
-		"ep_min_tracks: 4\nep_max_tracks: 9\n"+
-		"client_id: cid\nclient_secret: cs\nrefresh_token: rt\n"))
+func TestParseSettingsIgnoresRetiredTrackThresholds(t *testing.T) {
+	// Configs written for the Spotify-only version still carry these.
+	_, err := parseSettings(widgetConfig(t, "type: spotify\ntitle: X\ninclude: eps\n"+
+		"ep_min_tracks: 8\nep_max_tracks: 3\n"))
 	if err != nil {
-		t.Fatalf("parseSettings: %v", err)
-	}
-	if p.minEP != 4 || p.maxEP != 9 {
-		t.Errorf("minEP/maxEP = %d/%d, want 4/9", p.minEP, p.maxEP)
+		t.Fatalf("old ep_*_tracks keys must not break the config: %v", err)
 	}
 }
 
-// newProviderForTest builds a Provider around an isolated, network-free
-// shared cache — bypassing New()/acquire() entirely, the same pattern
-// shared_test.go uses via newTestShared().
-func newProviderForTest(include string, minEP, maxEP int) *Provider {
-	return &Provider{shared: newTestShared(), include: include, minEP: minEP, maxEP: maxEP}
+func newProviderForTest(include string) *Provider {
+	return &Provider{shared: newTestShared(), include: include}
 }
 
 func TestFetchMapsSnapshotToItems(t *testing.T) {
-	p := newProviderForTest("album", 3, 7)
-	date := time.Now().Add(48 * time.Hour)
-	p.shared.releases["a1"] = releaseEntry{
-		album: spotifyapi.Album{
-			ID: "a1", Name: "New Album", AlbumType: "album", TotalTracks: 12,
-			ArtistName: "Some Artist", URL: "https://open.spotify.com/album/a1", ImageURL: "https://img/a1.jpg",
-		},
-		date: date,
-	}
+	p := newProviderForTest("album")
+	day := time.Now().AddDate(0, 0, 3)
+	e := entry("rg1", "album", day.Format("2006-01-02"))
+	e.rg.Title, e.rg.ArtistCredit, e.rg.SecondaryTypes = "New Album", "Some Artist", []string{"Live"}
+	p.shared.releases["rg1"] = e
 
 	got, err := p.Fetch(context.Background())
 	if err != nil {
@@ -122,53 +100,65 @@ func TestFetchMapsSnapshotToItems(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(got.Items))
 	}
 	it := got.Items[0]
-	if it.Title != "New Album" || it.Source != "Some Artist" || it.URL != "https://open.spotify.com/album/a1" {
+	if it.ID != "rg1" || it.Title != "New Album" || it.Source != "Some Artist" || it.URL != "https://musicbrainz.org/release-group/rg1" {
 		t.Errorf("unexpected item: %+v", it)
 	}
-	if it.Thumbnail != "https://img/a1.jpg" {
-		t.Errorf("Thumbnail = %q", it.Thumbnail)
+	if want := "Album · Live · " + day.Format("2 Jan 2006"); it.Summary != want {
+		t.Errorf("Summary = %q, want %q", it.Summary, want)
 	}
-	if it.Summary != "Album · 12 tracks" {
-		t.Errorf("Summary = %q", it.Summary)
+	if !it.PublishedAt.Equal(e.date) {
+		t.Errorf("PublishedAt = %v, want %v", it.PublishedAt, e.date)
 	}
-	if !it.PublishedAt.Equal(date) {
-		t.Errorf("PublishedAt = %v, want %v", it.PublishedAt, date)
+}
+
+func TestFetchImpreciseDateHasNoCountdown(t *testing.T) {
+	p := newProviderForTest("eps")
+	month := time.Now().AddDate(0, 1, 0)
+	p.shared.releases["rg1"] = entry("rg1", "eps", month.Format("2006-01"))
+
+	got, _ := p.Fetch(context.Background())
+	if len(got.Items) != 1 {
+		t.Fatalf("got %d items", len(got.Items))
+	}
+	if !got.Items[0].PublishedAt.IsZero() {
+		t.Error("a month-only date must not render as a precise countdown")
+	}
+	if want := "EP · " + month.Format("Jan 2006"); got.Items[0].Summary != want {
+		t.Errorf("Summary = %q, want %q", got.Items[0].Summary, want)
 	}
 }
 
 func TestFetchOnlyReturnsMatchingInclude(t *testing.T) {
-	p := newProviderForTest("album", 3, 7)
-	date := time.Now().Add(24 * time.Hour)
-	p.shared.releases["ep1"] = releaseEntry{
-		album: spotifyapi.Album{ID: "ep1", Name: "An EP", AlbumType: "single", TotalTracks: 5},
-		date:  date,
-	}
-
+	p := newProviderForTest("album")
+	p.shared.releases["ep1"] = entry("ep1", "eps", time.Now().AddDate(0, 0, 1).Format("2006-01-02"))
 	got, err := p.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+	if err != nil || len(got.Items) != 0 {
+		t.Fatalf("albums widget should not surface an EP: %+v, %v", got.Items, err)
 	}
-	if len(got.Items) != 0 {
-		t.Fatalf("albums widget should not surface an EP-classified release, got %+v", got.Items)
+}
+
+func TestFetchAllMixesAlbumsAndEPs(t *testing.T) {
+	p := newProviderForTest("all")
+	p.shared.releases["ep1"] = entry("ep1", "eps", time.Now().AddDate(0, 0, 1).Format("2006-01-02"))
+	p.shared.releases["al1"] = entry("al1", "album", time.Now().AddDate(0, 0, 2).Format("2006-01-02"))
+	got, err := p.Fetch(context.Background())
+	if err != nil || len(got.Items) != 2 || got.Items[0].ID != "ep1" || got.Items[1].ID != "al1" {
+		t.Fatalf("want both, soonest first: %+v, %v", got.Items, err)
+	}
+	if !strings.HasPrefix(got.Items[0].Summary, "EP · ") || !strings.HasPrefix(got.Items[1].Summary, "Album · ") {
+		t.Errorf("summaries should say which is which: %q, %q", got.Items[0].Summary, got.Items[1].Summary)
 	}
 }
 
 func TestFetchEmptyCacheIsNotAnError(t *testing.T) {
-	p := newProviderForTest("album", 3, 7)
-	got, err := p.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	if len(got.Items) != 0 {
-		t.Errorf("expected no items, got %+v", got.Items)
+	got, err := newProviderForTest("album").Fetch(context.Background())
+	if err != nil || len(got.Items) != 0 {
+		t.Fatalf("got %+v, %v", got.Items, err)
 	}
 }
 
-func TestSummarize(t *testing.T) {
-	if got := summarize("album", 1); got != "Album · 1 track" {
-		t.Errorf("summarize(album, 1) = %q", got)
-	}
-	if got := summarize("eps", 3); got != "EP · 3 tracks" {
-		t.Errorf("summarize(eps, 3) = %q", got)
+func TestSummarizeFutureYear(t *testing.T) {
+	if got := summarize(entry("x", "album", "2031")); got != "Album · 2031, date TBA" {
+		t.Errorf("summarize = %q", got)
 	}
 }

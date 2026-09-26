@@ -3,6 +3,7 @@ package spotifyapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -171,78 +172,28 @@ func TestFollowedArtistsPaginates(t *testing.T) {
 	}
 }
 
-func TestArtistAlbumsFollowsPagination(t *testing.T) {
+func TestFollowedArtistsReturnsLong429AsRateLimitedError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.RawQuery, "page2") {
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"items": []map[string]any{{"id": "b2", "name": "Second", "album_type": "single", "total_tracks": 1}},
-				"next":  nil,
-			})
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"items": []map[string]any{{"id": "b1", "name": "First", "album_type": "album", "total_tracks": 10}},
-			"next":  "http://" + r.Host + "/artists/a1/albums?page2=1",
-		})
-	}))
-	defer srv.Close()
-
-	c := testClient(nil, srv)
-	albums, err := c.ArtistAlbums(context.Background(), "at-1", "a1")
-	if err != nil {
-		t.Fatalf("ArtistAlbums: %v", err)
-	}
-	if len(albums) != 2 {
-		t.Fatalf("got %d albums, want 2: %+v", len(albums), albums)
-	}
-	if albums[0].Name != "First" || albums[1].Name != "Second" {
-		t.Errorf("unexpected order/content: %+v", albums)
-	}
-}
-
-func TestArtistAlbumsRetriesAfter429(t *testing.T) {
-	attempts := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts++
-		if attempts == 1 {
-			w.Header().Set("Retry-After", "0")
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"items": []map[string]any{{"id": "b1", "name": "First", "album_type": "album", "total_tracks": 10}},
-			"next":  nil,
-		})
-	}))
-	defer srv.Close()
-
-	c := testClient(nil, srv)
-	albums, err := c.ArtistAlbums(context.Background(), "at-1", "a1")
-	if err != nil {
-		t.Fatalf("ArtistAlbums: %v", err)
-	}
-	if attempts != 2 {
-		t.Errorf("expected a retry, got %d attempts", attempts)
-	}
-	if len(albums) != 1 {
-		t.Fatalf("got %d albums", len(albums))
-	}
-}
-
-func TestArtistAlbumsGivesUpAfterSecond429(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "0")
+		w.Header().Set("Retry-After", "74442")
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 
-	c := testClient(nil, srv)
-	start := time.Now()
-	_, err := c.ArtistAlbums(context.Background(), "at-1", "a1")
-	if err == nil {
-		t.Fatal("expected an error after a persistent 429")
+	_, _, err := testClient(nil, srv).FollowedArtists(context.Background(), "at-1", "")
+	var rl *RateLimitedError
+	if !errors.As(err, &rl) || rl.RetryAfter != 74442*time.Second {
+		t.Fatalf("want a *RateLimitedError carrying Retry-After, got %v", err)
 	}
-	if time.Since(start) > 5*time.Second {
-		t.Errorf("took too long: %s", time.Since(start))
+}
+
+func TestDoGETWraps401AsErrUnauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := testClient(nil, srv).WhoAmI(context.Background(), "expired")
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Errorf("want ErrUnauthorized, got %v", err)
 	}
 }

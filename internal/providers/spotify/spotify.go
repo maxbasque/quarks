@@ -1,10 +1,10 @@
 // Package spotify surfaces upcoming releases from the widget owner's followed
-// Spotify artists, split into an "album" view and an "eps" view of the same
-// underlying data. The release cache is owned by a shared, per-account object
-// (see shared.go) so that two widget instances reading the same account never
-// double the API load between them — there's no background goroutine; Fetch
-// polls a small, rate-limit-safe batch synchronously (gated by a minimum
-// interval), triggered by the widget's own TTL or a manual refresh click.
+// Spotify artists — albums and EPs together by default, or either alone. Spotify only supplies who you follow; the releases
+// themselves come from MusicBrainz (see shared.go for why). The cache is owned
+// by a shared, per-account object so two widget instances reading the same
+// account never double the load between them — there's no background
+// goroutine; Fetch polls synchronously (gated by a minimum interval),
+// triggered by the widget's own TTL or a manual refresh click.
 package spotify
 
 import (
@@ -18,9 +18,10 @@ import (
 )
 
 type widgetSettings struct {
-	Include     string `yaml:"include"`       // "album" | "eps"
-	EPMinTracks int    `yaml:"ep_min_tracks"` // default 3
-	EPMaxTracks int    `yaml:"ep_max_tracks"` // default 7
+	// Include is "all" (default) | "album" | "eps", matched against
+	// MusicBrainz's own release-group type. (ep_min_tracks/ep_max_tracks from the Spotify-only
+	// days are no longer needed and are ignored if still present.)
+	Include string `yaml:"include"`
 
 	ClientID     string `yaml:"client_id"`
 	ClientSecret string `yaml:"client_secret"`
@@ -36,18 +37,16 @@ type widgetSettings struct {
 // isolation. Fetch reports it as an ordinary per-widget error instead, same
 // as any other widget whose credentials don't work yet.
 type Provider struct {
-	shared       *shared
-	include      string
-	minEP, maxEP int
+	shared  *shared
+	include string
 }
 
 // parsed is widgetSettings after defaulting and validation — split out from
 // New so parsing can be unit tested without acquire()'s side effect of
 // starting a real, network-hitting background poller.
 type parsed struct {
-	include      string
-	minEP, maxEP int
-	creds        spotifyapi.Credentials
+	include string
+	creds   spotifyapi.Credentials
 }
 
 func parseSettings(cfg core.WidgetConfig) (parsed, error) {
@@ -58,29 +57,18 @@ func parseSettings(cfg core.WidgetConfig) (parsed, error) {
 
 	include := strings.ToLower(strings.TrimSpace(s.Include))
 	if include == "" {
-		include = "album"
+		include = "all"
 	}
-	if include != "album" && include != "eps" {
-		return parsed{}, fmt.Errorf("spotify widget %q: include must be \"album\" or \"eps\", got %q", cfg.Title, s.Include)
-	}
-
-	minEP, maxEP := s.EPMinTracks, s.EPMaxTracks
-	if minEP == 0 {
-		minEP = 3
-	}
-	if maxEP == 0 {
-		maxEP = 7
-	}
-	if minEP > maxEP {
-		return parsed{}, fmt.Errorf("spotify widget %q: ep_min_tracks (%d) > ep_max_tracks (%d)", cfg.Title, minEP, maxEP)
+	if include != "all" && include != "album" && include != "eps" {
+		return parsed{}, fmt.Errorf("spotify widget %q: include must be \"all\", \"album\" or \"eps\", got %q", cfg.Title, s.Include)
 	}
 
 	creds := spotifyapi.Credentials{ClientID: s.ClientID, ClientSecret: s.ClientSecret, RefreshToken: s.RefreshToken}
-	return parsed{include: include, minEP: minEP, maxEP: maxEP, creds: creds}, nil
+	return parsed{include: include, creds: creds}, nil
 }
 
 // New is the core.Factory for "spotify". It only fails for structural config
-// mistakes (bad include, inverted thresholds) — missing credentials produce a
+// mistakes (a bad include) — missing credentials produce a
 // working Provider whose Fetch reports "not connected" until secrets.yaml has
 // them, rather than refusing to build at all.
 func New(cfg core.WidgetConfig) (core.Provider, error) {
@@ -88,7 +76,7 @@ func New(cfg core.WidgetConfig) (core.Provider, error) {
 	if err != nil {
 		return nil, err
 	}
-	prov := &Provider{include: p.include, minEP: p.minEP, maxEP: p.maxEP}
+	prov := &Provider{include: p.include}
 	if p.creds.ClientID != "" && p.creds.ClientSecret != "" && p.creds.RefreshToken != "" {
 		prov.shared = acquire(p.creds, slog.Default())
 	}
@@ -99,30 +87,46 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	if p.shared == nil {
 		return core.Payload{}, fmt.Errorf("spotify: not connected — connect Spotify from the Settings page")
 	}
-	p.shared.maybePoll(ctx)
-	snap := p.shared.snapshot(p.include, p.minEP, p.maxEP)
+	if err := p.shared.maybePoll(ctx); err != nil {
+		// The store keeps the last good items on error, so this shows as a
+		// failure badge over stale data rather than a silently empty list.
+		return core.Payload{}, err
+	}
+	snap := p.shared.snapshot(p.include)
 	items := make([]core.Item, 0, len(snap))
 	for _, r := range snap {
-		items = append(items, core.Item{
-			ID:          r.album.ID,
-			Title:       r.album.Name,
-			URL:         r.album.URL,
-			Source:      r.album.ArtistName,
-			Thumbnail:   r.album.ImageURL,
-			PublishedAt: r.date,
-			Summary:     summarize(r.class, r.album.TotalTracks),
-		})
+		it := core.Item{
+			ID:      r.rg.ID,
+			Title:   r.rg.Title,
+			URL:     r.rg.URL(),
+			Source:  r.rg.ArtistCredit,
+			Summary: summarize(r),
+		}
+		// Only an exact day gets a countdown ("in 12d"); a month- or
+		// year-only date would read as falsely precise, so it's in the
+		// summary instead.
+		if r.precision == "day" {
+			it.PublishedAt = r.date
+		}
+		items = append(items, it)
 	}
 	return core.Feed(items), nil
 }
 
-func summarize(class string, tracks int) string {
-	label := "Album"
-	if class == "eps" {
-		label = "EP"
+// summarize renders e.g. "Album · Live · 13 Oct 2026" or "EP · Nov 2026".
+func summarize(r releaseEntry) string {
+	parts := []string{"Album"}
+	if r.class == "eps" {
+		parts[0] = "EP"
 	}
-	if tracks == 1 {
-		return label + " · 1 track"
+	parts = append(parts, r.rg.SecondaryTypes...)
+	switch r.precision {
+	case "day":
+		parts = append(parts, r.date.Format("2 Jan 2006"))
+	case "month":
+		parts = append(parts, r.date.Format("Jan 2006"))
+	case "year":
+		parts = append(parts, r.date.Format("2006")+", date TBA")
 	}
-	return fmt.Sprintf("%s · %d tracks", label, tracks)
+	return strings.Join(parts, " · ")
 }
