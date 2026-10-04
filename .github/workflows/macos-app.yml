@@ -52,7 +52,7 @@ jobs:
           mkdir -p "$home/Library/Application Support/quarks"
           printf 'pages:\n  - name: Home\n    widgets:\n      - { type: ebird, title: Birds }\n' > "$home/Library/Application Support/quarks/config.yaml"
           set +e
-          HOME="$home" QUARKS_HEADLESS=1 perl -e 'alarm 20; exec @ARGV' "dist/Quark's.app/Contents/MacOS/Quarks" 2> err.txt
+          HOME="$home" QUARKS_HEADLESS=1 perl -e 'alarm 20; exec { $ARGV[0] } @ARGV' "dist/Quark's.app/Contents/MacOS/Quarks" 2> err.txt
           code=$?
           set -e
           cat err.txt
