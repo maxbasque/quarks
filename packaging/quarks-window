@@ -1,0 +1,5 @@
+#!/bin/sh
+# quarks-window opens the native dashboard window. The window code lives in
+# the quarks binary (one Deno runtime on disk instead of two), as
+# `quarks window`; this keeps the old command line working.
+exec "$(dirname "$0")/quarks" window "$@"
