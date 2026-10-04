@@ -87,6 +87,9 @@ For a first project in an unfamiliar language that's worth a great deal.
 
 ## 3. Stack: Go (recommended, not yet locked)
 
+> **2026-10-04:** the `deno-port` branch ports the whole app to TypeScript on Deno —
+> the counter-argument below, taken up. See PROGRESS.md › Deno port.
+
 **Go for the core, HTML/CSS/vanilla JS for the UI, no framework, no build step.**
 
 Why Go here:

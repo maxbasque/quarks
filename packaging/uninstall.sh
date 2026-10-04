@@ -6,6 +6,7 @@ set -euo pipefail
 os="$(uname)"
 bin_dir="$HOME/.local/bin"
 rm -f "$bin_dir/quarks" "$bin_dir/quarks-open" "$bin_dir/quarks-window"
+rm -rf "$HOME/.local/lib/quarks"
 
 if [ "$os" = "Darwin" ]; then
   plist="$HOME/Library/LaunchAgents/com.maxbasque.quarks.plist"

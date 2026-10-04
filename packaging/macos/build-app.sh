@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Quark's.app and Quarks-<version>.dmg into dist/. Runs on macOS only —
-# it needs the Xcode command-line tools (cgo, lipo), sips, iconutil, codesign
+# it needs deno, the Xcode command-line tools (lipo), sips, iconutil, codesign
 # and hdiutil. The release workflow runs it on GitHub's macOS machines.
 #
 #   packaging/macos/build-app.sh 1.0.0
@@ -15,33 +15,23 @@ app="$out/Quark's.app"
 rm -rf "$out"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
-# The oldest macOS the app runs on. Go itself needs 13 (Ventura); clang and
-# ld read this for the C, C++ (webview) and link steps alike. Keep it equal
-# to LSMinimumSystemVersion in Info.plist.
-export MACOSX_DEPLOYMENT_TARGET=13.0
-
 echo "==> building the app (Apple silicon + Intel)"
-for arch in arm64 amd64; do
-  ( cd "$repo" && CGO_ENABLED=1 GOOS=darwin GOARCH=$arch \
-      go build -trimpath -ldflags="-s -w" -o "$out/quarks-$arch" ./cmd/quarks-mac ) 2>&1 | tee "$out/build-$arch.log"
-  # code compiled for a newer macOS links with only a warning, then fails to
-  # launch on older Macs — make that a build failure
-  if grep -q "built for newer" "$out/build-$arch.log"; then
-    echo "error: some code targets a newer macOS than $MACOSX_DEPLOYMENT_TARGET" >&2
-    exit 1
-  fi
-  rm "$out/build-$arch.log"
+for target in aarch64-apple-darwin x86_64-apple-darwin; do
+  ( cd "$repo" && make --no-print-directory mac TARGET=$target OUT="$out/quarks-$target" )
 done
-lipo -create -output "$app/Contents/MacOS/Quarks" "$out/quarks-arm64" "$out/quarks-amd64"
-rm "$out/quarks-arm64" "$out/quarks-amd64"
+lipo -create -output "$app/Contents/MacOS/Quarks" "$out/quarks-aarch64-apple-darwin" "$out/quarks-x86_64-apple-darwin"
+rm "$out/quarks-aarch64-apple-darwin" "$out/quarks-x86_64-apple-darwin"
+
+echo "==> adding the webview library"
+# the binary loads the one matching its architecture from Contents/Frameworks
+"$repo/packaging/fetch-libwebview.sh" "$app/Contents/Frameworks" libwebview.aarch64.dylib libwebview.x86_64.dylib
 
 echo "==> assembling the bundle"
 sed "s/__VERSION__/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
-cp "$repo/config.example.yaml" "$app/Contents/Resources/config.example.yaml"
 
 iconset="$out/AppIcon.iconset"
 mkdir -p "$iconset"
-src="$repo/internal/web/static/icon-512.png"
+src="$repo/src/web/static/icon-512.png"
 for s in 16 32 128 256 512; do
   sips -z $s $s "$src" --out "$iconset/icon_${s}x${s}.png" >/dev/null
   sips -z $((s * 2)) $((s * 2)) "$src" --out "$iconset/icon_${s}x${s}@2x.png" >/dev/null

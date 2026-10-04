@@ -3,7 +3,8 @@
 Companion to `quarks-plan.md` (the design, the source of truth). This file tracks
 *what has actually been built and run*. Update it at the end of each work session.
 
-**Language:** Go 1.27 (locked 2026-09-08, resolves plan §14 Q1).
+**Language:** TypeScript on Deno 2 (ported from Go 1.27 on the `deno-port` branch,
+2026-10-04; Go was locked 2026-09-08 for plan §14 Q1).
 **Box:** Bazzite Kinoite, **KDE** (resolves plan §14 Q6). Google Chrome flatpak
 (`com.google.Chrome`) already installed — satisfies the Chromium-family requirement
 for the app-window; launchers must call `flatpak run com.google.Chrome --app=…`.
@@ -22,6 +23,33 @@ for the app-window; launchers must call `flatpak run com.google.Chrome --app=…
 | M5 | Packaging: systemd --user unit, .desktop + StartupWMClass, Makefile, README | **✅ done (2026-09-08)** — installed + verified on the Bazzite box |
 | M6 | OAuth subsystem: YouTube subscription sync, token storage/refresh, `quarks auth youtube` | not started |
 | M7 | Optional shells: Wails native window or Bubble Tea TUI | not started |
+
+---
+
+## Deno port — 2026-10-04 (`deno-port` branch)
+
+Everything ported from Go to TypeScript on Deno 2, same behaviour and markup:
+
+- **Server**: `Deno.serve`; Go's `html/template` became tagged-template
+  functions that escape every value (`src/web/html.ts`), including html/template's
+  URL filtering (`javascript:` → `#ZgotmplZ`). Same-cache rendering diffed against
+  the Go server: identical apart from the reader view's extraction library.
+- **Libraries**: gofeed → a small RSS/Atom/RDF/JSON Feed normalizer on
+  `fast-xml-parser`; go-readability + bluemonday → Mozilla Readability on linkedom +
+  sanitize-html (UGC-equivalent policy, no `class`/`id`); yaml.v3 → `yaml`
+  (comment-preserving `secrets.yaml` edits, byte-identical `layout.yaml`).
+- **Cache**: snapshot files keep the Go JSON shape, so either version warms the other.
+- **Windows**: the webview C library through `Deno.dlopen` instead of cgo — no
+  WebKitGTK headers, no toolbox; `make install` fetches a pinned libwebview
+  (GTK 4 / WebKitGTK 6). The window lives in the `quarks` binary as `quarks window`.
+  After the window closes, the process leaves with `_exit` — WebKit's atexit
+  teardown can deadlock a normal exit (Go's exit never ran it either).
+- **macOS app**: `webview_run` owns the main thread, so the server runs in a
+  worker; menus go through the Objective-C runtime over FFI. Cross-compiles from
+  Linux; the `.app`/`.dmg` (lipo, codesign) still needs the macOS CI runner.
+- **Tests**: every Go test ported (147 `Deno.test`s, offline), plus store /
+  scheduler / reload coverage the Go suite didn't have.
+- **Cost**: the compiled binary is ~115 MB (V8 inside) against Go's ~18 MB.
 
 ---
 
@@ -327,44 +355,42 @@ run `xprop WM_CLASS` on it and fix `quarks.desktop` if the taskbar icon is gener
 
 ---
 
-## Repo layout (built so far)
+## Repo layout
 
 ```
-cmd/quarks/main.go              flags, signal handling → app.Run
-cmd/fakefeed/main.go            dev-only fake feed server
-internal/app/app.go             wiring, provider registry, config hot-reload
-internal/config/
-  config.go                     YAML load + validate + defaults
-  secrets.go                    ${VAR} / ${secret:key} expansion, 0600 check
-internal/core/
-  item.go                       normalized Item
-  weather.go                    Weather / WeatherDay + WMO code labels
-  provider.go                   Provider iface, Payload{Items,Weather}, WidgetConfig
-  registry.go                   type name → Factory
-  scheduler.go                  per-widget fetch loops, WaitGroup drain
-  store.go                      in-memory + on-disk snapshot, reload-safe
-internal/providers/             (each: <name>.go + <name>_test.go)
-  rss/       generic feed provider (gofeed) + testdata/*.xml
-  hackernews/  Algolia search API
-  weather/     Open-Meteo
-  reddit/      r/<subs>.json  (fragile — residential IP)
-  youtube/     channels/playlists → Atom, wraps rss
-  nhl/         a team's season schedule (api-web.nhle.com)
-internal/reader/reader.go       article extraction (go-readability + bluemonday)
-internal/web/
-  web.go                        handlers (/, /reader, /open, /manifest), Meta
-  templates/{index,reader}.html html/template
-  static/{style.css,app.js,favicon.svg,icon-*.png,manifest.webmanifest}
+cmd/quarks.ts                   flags, signal handling → app.run; `quarks window`
+cmd/quarks_window.ts            Linux native window (libwebview over FFI)
+cmd/quarks_mac.ts               macOS app (window on main thread, server in a worker)
+cmd/fakefeed.ts                 dev-only fake feed server
+src/app.ts                      wiring, provider registry, config hot-reload
+src/config/
+  config.ts                     YAML load + validate + defaults, named columns
+  secrets.ts                    ${VAR} / ${secret:key} expansion, 0600 check, edits
+  layout.ts                     layout.yaml (Settings' page/column toggles)
+src/core/
+  types.ts                      Item, Weather, Standings, Payload, WMO labels
+  provider.ts                   Provider, WidgetConfig, Settings, Registry, durations
+  scheduler.ts                  per-widget fetch loops, abort-signal drain
+  store.ts                      in-memory + on-disk snapshot (Go-compatible JSON)
+src/providers/                  rss/ (feedparser.ts), hackernews, weather, reddit,
+                                youtube, nhl, standings, f1, onthisday, potd, spotify/
+src/musicbrainz.ts, src/spotifyapi.ts   API clients
+src/reader.ts                   article extraction (Readability + sanitize-html)
+src/web/
+  server.ts                     handlers (/, /reader, /open, /refresh, /manifest), Meta
+  settings.ts                   /settings and its forms
+  templates.ts, html.ts         page templates + escaping
+  static/                       style.css, app.js, fonts, icons, manifest
+src/window/                     webview.ts (FFI), gtk.ts, cocoa.ts
 packaging/
   install.sh, uninstall.sh      user-scoped install (make install / uninstall)
+  fetch-libwebview.sh           pinned libwebview download
   quarks.service                systemd --user unit
   quarks.desktop                app launcher (+ StartupWMClass)
-  quarks-open                   chromeless app-window launcher
+  quarks-open, quarks-window    window launchers
+  macos/                        .app / .dmg build
 config.fake.yaml                UI-dev config pointing at fakefeed
 config.example.yaml, secrets.example.yaml
-  static/{style.css,app.js,favicon.svg}
-packaging/{quarks.service,quarks.desktop,install.sh}
-config.example.yaml
 ```
 
 ---

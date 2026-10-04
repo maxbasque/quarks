@@ -22,12 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: denoland/setup-deno@v2
         with:
-          go-version-file: go.mod
+          deno-version: v2.x
 
       - name: Test
-        run: go test ./...
+        run: deno test --allow-all
 
       - name: Install create-dmg
         run: brew install create-dmg

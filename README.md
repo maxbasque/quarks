@@ -1,7 +1,7 @@
 # Quark's
 
 A self-hosted, modular personal feed dashboard — Radio-Canada, Reddit, YouTube,
-Hacker News and weather on one screen. Glance-inspired, built from scratch in Go.
+Hacker News and weather on one screen. Glance-inspired, built from scratch in TypeScript on Deno.
 Read-only, no database, binds to `127.0.0.1`. Primary target Bazzite (Fedora
 Atomic); runs on macOS too.
 
@@ -21,7 +21,7 @@ macOS. Not built yet: calendar, YouTube-subscription OAuth.
 ## Quick start
 
 ```bash
-go build -o quarks ./cmd/quarks
+make build                     # deno compile → a standalone ./quarks binary
 mkdir -p ~/.config/quarks
 cp config.example.yaml ~/.config/quarks/config.yaml   # then edit it
 ./quarks
@@ -77,17 +77,17 @@ make uninstall   # undo  (./packaging/uninstall.sh --purge also drops config/cac
 **systemd `--user`** service (starts at login; `loginctl enable-linger $USER` to
 keep it running while logged out), and a `.desktop` launcher with icons. Launch
 the window from your app menu ("Quark's") or `quarks-open`. The window is
-`quarks-window` (`cmd/quarks-window`), a native WebKitGTK viewer on the running
-service — no browser needed; closing it leaves the service running. It needs the
-WebKitGTK headers to build: `make install` builds it natively if they're
-installed (`webkit2gtk4.1-devel gtk3-devel` / `libwebkit2gtk-4.1-dev
-libgtk-3-dev`), else in a `quarks-build` toolbox it creates on first use (the
-route on Fedora Atomic / Bazzite). `make window` rebuilds just the window.
+`quarks-window` (`cmd/quarks_window.ts`, run as `quarks window`), a native
+WebKitGTK viewer on the running service — no browser needed; closing it leaves
+the service running. Nothing to compile: it loads the webview library through
+FFI, and `make install` downloads that library (pinned by SHA-256) to
+`~/.local/lib/quarks`. It's built for GTK 4 + WebKitGTK 6.0, which Fedora /
+Bazzite ship. `make window` reinstalls just the window.
 
 **macOS, for everyone else** — download `Quarks-<version>.dmg` from the
 GitHub releases page and drag Quark's onto Applications (step-by-step French
 guide: [`packaging/macos/INSTALLER.md`](packaging/macos/INSTALLER.md)). It's a
-native app (`cmd/quarks-mac`): the server and a WebKit window in one process,
+native app (`cmd/quarks_mac.ts`): the server and a WebKit window in one process,
 so opening it starts everything and quitting or closing the window stops
 everything — no browser needed, nothing starts at login. It isn't signed with
 an Apple developer account, so macOS asks for *Open Anyway* once. Built on
@@ -96,8 +96,8 @@ publishes a release; a push to a `mac/...` branch builds a test `.dmg`.
 
 **macOS, from source** — binary + `quarks-open` to `~/.local/bin`, and a **launchd**
 LaunchAgent (`~/Library/LaunchAgents/com.maxbasque.quarks.plist`, logs to
-`~/Library/Logs/quarks.log`). Run `quarks-open` for the window. Needs Homebrew Go
-to build (`brew install go`) and a Chromium-family browser (Chrome / Chromium /
+`~/Library/Logs/quarks.log`). Run `quarks-open` for the window. Needs Deno to
+build (`brew install deno`) and a Chromium-family browser (Chrome / Chromium /
 Brave / Edge) for the app-window — Firefox dropped app-window support.
 
 In every window — Linux, the macOS app, or the macOS from-source Chrome app
@@ -106,8 +106,11 @@ window — clicking an article opens it in your **OS default browser**
 
 ## Development
 
+Needs [Deno](https://deno.com) 2 (`curl -fsSL https://deno.land/install.sh | sh`).
+
 ```bash
 make test          # offline — providers run against recorded fixtures
+make check         # type-check + lint
 make fakefeed      # terminal 1: fake YouTube / news / Reddit feeds on :7400
 make dev           # terminal 2: quarks against config.fake.yaml (server only)
 make open          # terminal 3: open the dashboard in an app-window
@@ -119,13 +122,16 @@ make open          # terminal 3: open the dashboard in an app-window
 ## Layout
 
 ```
-cmd/quarks/          entrypoint, flags, signal handling
-cmd/fakefeed/        dev-only fake feed server
-internal/app/        wiring, provider registry, config hot-reload
-internal/config/     YAML load + validate + ${secret:} / ${env} expansion
-internal/core/       Item, Weather, Provider, registry, scheduler, store
-internal/providers/  rss, hackernews, weather, reddit, youtube
-internal/reader/     article extraction (go-readability + bluemonday)
-internal/web/        handlers, templates, embedded static assets
-packaging/           install.sh / uninstall.sh, service unit, launchd plist, .desktop
+cmd/quarks.ts          server entrypoint (flags, signals) + `quarks window`
+cmd/quarks_window.ts   Linux native window (webview over FFI)
+cmd/quarks_mac.ts      macOS app: window on the main thread, server in a worker
+cmd/fakefeed.ts        dev-only fake feed server
+src/app.ts             wiring, provider registry, config hot-reload
+src/config/            YAML load + validate + ${secret:} / ${env} expansion
+src/core/              Item, Weather, Provider, registry, scheduler, store
+src/providers/         rss (+ feed parser), hackernews, weather, reddit, youtube, …
+src/reader.ts          article extraction (Mozilla Readability + sanitize-html)
+src/web/               handlers, templates, static assets
+src/window/            libwebview FFI binding, GTK and Cocoa helpers
+packaging/             install.sh / uninstall.sh, service unit, launchd plist, .desktop
 ```

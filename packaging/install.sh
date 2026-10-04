@@ -2,6 +2,7 @@
 # Install Quark's for the current user. Nothing here needs root.
 #
 #   Linux : binary + quarks-window (native window) + quarks-open -> ~/.local/bin
+#           libwebview (pinned download) -> ~/.local/lib/quarks
 #           systemd --user service, .desktop launcher + hicolor icons
 #   macOS : binary + quarks-open -> ~/.local/bin
 #           launchd LaunchAgent (~/Library/LaunchAgents)
@@ -13,17 +14,22 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 os="$(uname)"
 bin_dir="$HOME/.local/bin"
 
-# go may live in a Homebrew prefix that isn't on a non-login PATH.
-if ! command -v go >/dev/null 2>&1; then
-  for p in /opt/homebrew/bin /home/linuxbrew/.linuxbrew/bin /usr/local/go/bin; do
-    [ -x "$p/go" ] && PATH="$p:$PATH"
+# deno may live in ~/.deno/bin (its own installer) or a Homebrew prefix, neither
+# of which is on a non-login PATH.
+if ! command -v deno >/dev/null 2>&1; then
+  for p in "$HOME/.deno/bin" /opt/homebrew/bin /home/linuxbrew/.linuxbrew/bin /usr/local/bin; do
+    [ -x "$p/deno" ] && PATH="$p:$PATH"
   done
 fi
-command -v go >/dev/null || { echo "install: 'go' not found — 'brew install go'"; exit 1; }
+command -v deno >/dev/null || {
+  echo "install: 'deno' not found — install it with:"
+  echo "  curl -fsSL https://deno.land/install.sh | sh"
+  exit 1
+}
 
 echo "==> building quarks"
 mkdir -p "$bin_dir"
-( cd "$repo" && go build -trimpath -ldflags="-s -w" -o "$bin_dir/quarks" ./cmd/quarks )
+( cd "$repo" && make --no-print-directory build OUT="$bin_dir/quarks" )
 install -m 755 "$repo/packaging/quarks-open" "$bin_dir/quarks-open"
 
 # ---- macOS ----------------------------------------------------------------
@@ -65,14 +71,15 @@ icon_dir="$HOME/.local/share/icons/hicolor"
 unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/quarks"
 
-echo "==> building the dashboard window (WebKitGTK)"
-"$repo/packaging/linux/build-window.sh" "$bin_dir/quarks-window"
+echo "==> installing the dashboard window (WebKitGTK)"
+install -m 755 "$repo/packaging/quarks-window" "$bin_dir/quarks-window"
+"$repo/packaging/fetch-libwebview.sh" "$HOME/.local/lib/quarks" "libwebview.$(uname -m | sed 's/arm64/aarch64/').so"
 
 echo "==> installing launcher + icons"
 mkdir -p "$app_dir" "$icon_dir/scalable/apps" "$icon_dir/192x192/apps" "$icon_dir/512x512/apps"
-install -m 644 "$repo/internal/web/static/favicon.svg"   "$icon_dir/scalable/apps/quarks.svg"
-install -m 644 "$repo/internal/web/static/icon-192.png"  "$icon_dir/192x192/apps/quarks.png"
-install -m 644 "$repo/internal/web/static/icon-512.png"  "$icon_dir/512x512/apps/quarks.png"
+install -m 644 "$repo/src/web/static/favicon.svg"   "$icon_dir/scalable/apps/quarks.svg"
+install -m 644 "$repo/src/web/static/icon-192.png"  "$icon_dir/192x192/apps/quarks.png"
+install -m 644 "$repo/src/web/static/icon-512.png"  "$icon_dir/512x512/apps/quarks.png"
 
 # a user-local icon theme dir needs its own index.theme or some loaders skip it
 [ -f "$icon_dir/index.theme" ] || cp -f /usr/share/icons/hicolor/index.theme "$icon_dir/index.theme" 2>/dev/null || \
