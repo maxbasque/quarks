@@ -9,8 +9,6 @@ Terminal=false
 Categories=Network;News;
 Keywords=feed;dashboard;rss;news;
 
-# Chromium's window id for `--app=http://localhost…` (verified on KDE Wayland,
-# Chrome flatpak — the port is not part of the id). If a Chromium build reports
-# something else and the taskbar shows a generic icon, open the dashboard and use
-# Chrome's "Install Quark's…", which writes its own correct entry.
-StartupWMClass=chrome-localhost__-Default
+# quarks-window sets its program name to "quarks" (the Wayland app_id / X11
+# WM_CLASS), which is how the taskbar matches the window to this entry.
+StartupWMClass=quarks

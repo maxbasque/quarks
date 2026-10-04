@@ -157,9 +157,10 @@ func checkHost(next http.Handler) http.Handler {
 	})
 }
 
-// handleOpen hands a URL to the OS default browser. The app-window (Chromium in
-// --app mode) would otherwise open links in a second Chromium window; the
-// frontend routes clicks here only when it is running standalone.
+// handleOpen hands a URL to the OS default browser. The native windows
+// (quarks-window on Linux, the macOS app) can't open new windows, so their
+// injected script sends off-site links here; app.js does the same when the
+// page runs as an installed web app.
 func (s *Server) handleOpen(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)

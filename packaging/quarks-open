@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Open the dashboard in a chromeless app-window, using whatever Chromium-family
-# browser is installed. Firefox is not supported — it dropped site-specific-
-# browser mode.
+# Open the dashboard window. On Linux that's quarks-window, the native
+# WebKitGTK window. On macOS from source (the .dmg app has its own window) it
+# is a chromeless app window in whatever Chromium-family browser is installed;
+# Firefox dropped that mode.
 set -euo pipefail
 
 url="${1:-http://localhost:7373}"
@@ -16,23 +17,9 @@ if [ "$(uname)" = "Darwin" ]; then
   exit 1
 fi
 
-# Linux: the native window when it's installed (make window), else a
-# Chromium-family browser — Flatpak first, then native binaries.
+# Linux: the native WebKitGTK window, built and installed by `make install`.
 if command -v quarks-window >/dev/null 2>&1; then
   exec quarks-window --url "$url"
 fi
-
-for app in com.google.Chrome org.chromium.Chromium com.brave.Browser com.microsoft.Edge io.github.ungoogled_software.ungoogled_chromium; do
-  if flatpak info "$app" >/dev/null 2>&1; then
-    exec flatpak run "$app" --app="$url"
-  fi
-done
-
-for bin in chromium chromium-browser google-chrome google-chrome-stable brave brave-browser microsoft-edge; do
-  if command -v "$bin" >/dev/null 2>&1; then
-    exec "$bin" --app="$url"
-  fi
-done
-
-echo "quarks-open: no Chromium-family browser found (e.g. 'flatpak install flathub com.google.Chrome')" >&2
+echo "quarks-open: quarks-window isn't installed — run 'make install' in the Quarks repo" >&2
 exit 1

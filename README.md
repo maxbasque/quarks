@@ -73,17 +73,16 @@ make uninstall   # undo  (./packaging/uninstall.sh --purge also drops config/cac
 
 `make install` detects the OS:
 
-**Linux** — binary + `quarks-open` to `~/.local/bin`, a **systemd `--user`**
-service (starts at login; `loginctl enable-linger $USER` to keep it running while
-logged out), and a `.desktop` launcher with icons. Launch the window from your app
-menu ("Quark's") or `quarks-open`.
-
-**Linux native window (optional)** — `make window` builds `quarks-window`, a
-WebKitGTK window on the running service, and installs it to `~/.local/bin`;
-`quarks-open` (and so the app-menu launcher) then uses it instead of a
-Chromium-family browser. It needs the WebKitGTK headers, so it's built in a
-toolbox — the one-time setup is in the Makefile. Remove
-`~/.local/bin/quarks-window` to go back to the Chromium window.
+**Linux** — binary + `quarks-window` + `quarks-open` to `~/.local/bin`, a
+**systemd `--user`** service (starts at login; `loginctl enable-linger $USER` to
+keep it running while logged out), and a `.desktop` launcher with icons. Launch
+the window from your app menu ("Quark's") or `quarks-open`. The window is
+`quarks-window` (`cmd/quarks-window`), a native WebKitGTK viewer on the running
+service — no browser needed; closing it leaves the service running. It needs the
+WebKitGTK headers to build: `make install` builds it natively if they're
+installed (`webkit2gtk4.1-devel gtk3-devel` / `libwebkit2gtk-4.1-dev
+libgtk-3-dev`), else in a `quarks-build` toolbox it creates on first use (the
+route on Fedora Atomic / Bazzite). `make window` rebuilds just the window.
 
 **macOS, for everyone else** — download `Quarks-<version>.dmg` from the
 GitHub releases page and drag Quark's onto Applications (step-by-step French
@@ -101,10 +100,9 @@ LaunchAgent (`~/Library/LaunchAgents/com.maxbasque.quarks.plist`, logs to
 to build (`brew install go`) and a Chromium-family browser (Chrome / Chromium /
 Brave / Edge) for the app-window — Firefox dropped app-window support.
 
-The window is a chromeless Chromium `--app=` window. Running standalone, a link
-click opens in your **OS default browser** (`xdg-open` / `open`), not a second
-Chromium window. For the tidiest taskbar/Dock integration, open the dashboard and
-use Chrome's "Install Quark's…".
+In every window — Linux, the macOS app, or the macOS from-source Chrome app
+window — clicking an article opens it in your **OS default browser**
+(`xdg-open` / `open`); "lire ici" / Enter reads it inline.
 
 ## Development
 

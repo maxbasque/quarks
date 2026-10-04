@@ -20,7 +20,7 @@ fakefeed:
 dev: build
 	./$(BINARY) --config config.fake.yaml
 
-# Open the dashboard in a chromeless app-window (any Chromium-family browser).
+# Open the dashboard window (quarks-window on Linux; Chrome app-window on macOS from source).
 open:
 	./packaging/quarks-open $(ADDR)
 
@@ -40,16 +40,11 @@ install:
 uninstall:
 	./packaging/uninstall.sh
 
-# Native dashboard window (WebKitGTK) — replaces the Chromium app window once
-# installed; quarks-open prefers it. It needs the WebKitGTK headers, so it's
-# built in a toolbox (Bazzite's host is read-only) with the host's Go. One-time:
-#   toolbox create --distro fedora --release 44 quarks-build
-#   toolbox run -c quarks-build sudo dnf install -y webkit2gtk4.1-devel gtk3-devel gcc gcc-c++
-TOOLBOX ?= quarks-build
+# Just the native dashboard window (WebKitGTK); `make install` builds it too.
+# Builds natively if the WebKitGTK headers are installed, else in a toolbox
+# (created on first use) — see packaging/linux/build-window.sh.
 window:
-	toolbox run -c $(TOOLBOX) env PKG_CONFIG_PATH=$(CURDIR)/packaging/linux/pkgconfig CGO_ENABLED=1 \
-		/run/host$(shell realpath "$$(command -v go)") build -tags quarkswindow -trimpath -ldflags="-s -w" \
-		-o quarks-window ./cmd/quarks-window
+	./packaging/linux/build-window.sh $(CURDIR)/quarks-window
 	install -m 755 quarks-window $(HOME)/.local/bin/quarks-window
 
 clean:

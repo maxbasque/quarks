@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Quark's for the current user. Nothing here needs root.
 #
-#   Linux : binary + quarks-open -> ~/.local/bin
+#   Linux : binary + quarks-window (native window) + quarks-open -> ~/.local/bin
 #           systemd --user service, .desktop launcher + hicolor icons
 #   macOS : binary + quarks-open -> ~/.local/bin
 #           launchd LaunchAgent (~/Library/LaunchAgents)
@@ -64,6 +64,9 @@ app_dir="$HOME/.local/share/applications"
 icon_dir="$HOME/.local/share/icons/hicolor"
 unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 cfg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/quarks"
+
+echo "==> building the dashboard window (WebKitGTK)"
+"$repo/packaging/linux/build-window.sh" "$bin_dir/quarks-window"
 
 echo "==> installing launcher + icons"
 mkdir -p "$app_dir" "$icon_dir/scalable/apps" "$icon_dir/192x192/apps" "$icon_dir/512x512/apps"
