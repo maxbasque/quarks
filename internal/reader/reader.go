@@ -5,6 +5,7 @@ package reader
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -23,7 +24,14 @@ const (
 	cacheMax    = 64
 	maxBodySize = 8 << 20 // 8 MiB
 	fetchUA     = "Mozilla/5.0 (compatible; quarks/0.1; +https://github.com/maxbasque/quarks)"
+
+	// minReadableChars is the shortest extracted body we treat as an article.
+	// Below this, readability has almost certainly grabbed a caption or blurb.
+	minReadableChars = 250
 )
+
+// errNoContent means the page fetched fine but held no readable prose.
+var errNoContent = errors.New("no readable text on this page — try “open original”")
 
 // Article is the sanitized, readable form of a page.
 type Article struct {
@@ -51,7 +59,11 @@ type cached struct {
 func New() *Reader {
 	policy := bluemonday.UGCPolicy()
 	policy.RequireNoFollowOnLinks(true)
-	policy.AllowAttrs("class").Globally()
+	// Deliberately do NOT carry `class` through. Extracted pages bring their own
+	// class names (readability wraps its output in `<div class="page">`, sites
+	// add "grid", "panel", "hero", …) and those collide with the dashboard's own
+	// stylesheet — e.g. `.page:not(.is-active){display:none}` was blanking every
+	// article. The reader styles its content by tag, not class.
 
 	return &Reader{
 		http:   &http.Client{Timeout: 20 * time.Second},
@@ -95,12 +107,26 @@ func (r *Reader) Get(ctx context.Context, rawURL string) (Article, error) {
 		return Article{}, fmt.Errorf("reader: could not extract %s: %w", rawURL, err)
 	}
 
+	sanitized := strings.TrimSpace(r.policy.Sanitize(parsed.Content))
+	// Pages with no real prose — audio/video players, paywalls, link hubs —
+	// come back with a title but little or no body. Don't render a blank panel;
+	// tell the caller so the UI can point at "open original" instead.
+	if parsed.Length < minReadableChars || sanitized == "" {
+		return Article{}, errNoContent
+	}
+
+	byline := strings.TrimSpace(parsed.Byline)
+	siteName := strings.TrimSpace(parsed.SiteName)
+	if strings.EqualFold(byline, siteName) {
+		byline = "" // some sites report the outlet name as the byline too
+	}
+
 	art := Article{
 		Title:    strings.TrimSpace(parsed.Title),
-		Byline:   strings.TrimSpace(parsed.Byline),
-		SiteName: strings.TrimSpace(parsed.SiteName),
+		Byline:   byline,
+		SiteName: siteName,
 		URL:      rawURL,
-		HTML:     template.HTML(r.policy.Sanitize(parsed.Content)), //nolint:gosec // sanitized above
+		HTML:     template.HTML(sanitized), //nolint:gosec // sanitized above
 		Excerpt:  strings.TrimSpace(parsed.Excerpt),
 	}
 	r.store(rawURL, art)

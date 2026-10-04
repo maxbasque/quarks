@@ -42,6 +42,29 @@ func TestGetExtractsAndSanitizes(t *testing.T) {
 	if strings.Contains(html, "onclick") {
 		t.Errorf("inline handler not stripped:\n%s", html)
 	}
+	// class names from the page must not survive — they collide with the
+	// dashboard stylesheet (readability's own wrapper is <div class="page">,
+	// which the app hides with .page:not(.is-active){display:none}).
+	if strings.Contains(html, "class=") {
+		t.Errorf("class attribute not stripped:\n%s", html)
+	}
+}
+
+func TestGetRejectsContentlessPage(t *testing.T) {
+	// An audio/video page: title and outlet, but no article prose.
+	const thin = `<!doctype html><html><head><title>Podcast Episode</title>
+<meta property="og:site_name" content="Some Radio"></head><body>
+<h1>Podcast Episode</h1><div class="player">▶</div><p>Listen now.</p>
+</body></html>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(thin))
+	}))
+	defer srv.Close()
+
+	if _, err := New().Get(context.Background(), srv.URL); err == nil {
+		t.Error("expected an error for a page with no readable body")
+	}
 }
 
 func TestGetRejectsNonHTTP(t *testing.T) {
