@@ -1,5 +1,7 @@
 ## Installer Quark's sur un Mac
 
+Il faut macOS 13 (Ventura) ou plus récent — Menu Apple › À propos de ce Mac.
+
 1. Plus bas sur cette page, sous **Assets**, cliquez sur **Quarks-….dmg** pour le télécharger.
 2. Ouvrez le fichier téléchargé. Une fenêtre apparaît avec Quark's à gauche et le dossier Applications à droite : **glissez l'icône Quark's sur le dossier Applications**.
 3. Ouvrez le dossier **Applications** et double-cliquez sur **Quark's**.

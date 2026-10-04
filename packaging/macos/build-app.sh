@@ -15,11 +15,22 @@ app="$out/Quark's.app"
 rm -rf "$out"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
+# The oldest macOS the app runs on. Go itself needs 13 (Ventura); clang and
+# ld read this for the C, C++ (webview) and link steps alike. Keep it equal
+# to LSMinimumSystemVersion in Info.plist.
+export MACOSX_DEPLOYMENT_TARGET=13.0
+
 echo "==> building the app (Apple silicon + Intel)"
 for arch in arm64 amd64; do
   ( cd "$repo" && CGO_ENABLED=1 GOOS=darwin GOARCH=$arch \
-      CGO_CFLAGS="-mmacosx-version-min=11.0" CGO_LDFLAGS="-mmacosx-version-min=11.0" \
-      go build -trimpath -ldflags="-s -w" -o "$out/quarks-$arch" ./cmd/quarks-mac )
+      go build -trimpath -ldflags="-s -w" -o "$out/quarks-$arch" ./cmd/quarks-mac ) 2>&1 | tee "$out/build-$arch.log"
+  # code compiled for a newer macOS links with only a warning, then fails to
+  # launch on older Macs — make that a build failure
+  if grep -q "built for newer" "$out/build-$arch.log"; then
+    echo "error: some code targets a newer macOS than $MACOSX_DEPLOYMENT_TARGET" >&2
+    exit 1
+  fi
+  rm "$out/build-$arch.log"
 done
 lipo -create -output "$app/Contents/MacOS/Quarks" "$out/quarks-arm64" "$out/quarks-amd64"
 rm "$out/quarks-arm64" "$out/quarks-amd64"

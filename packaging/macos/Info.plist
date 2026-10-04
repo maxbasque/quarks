@@ -11,7 +11,7 @@
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>
   <key>CFBundleDevelopmentRegion</key><string>fr</string>
-  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
   <!-- the window shows the app's own server on 127.0.0.1, and feed
        articles can embed images from plain-http sites -->
   <key>NSAppTransportSecurity</key>
