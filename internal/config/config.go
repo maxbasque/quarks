@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 
@@ -177,37 +178,28 @@ func Load(path string) (*Config, error) {
 }
 
 // applyPageChoice overrides the pages' `enabled:` flags with the Settings
-// page's saved choice, when there is one naming at least one current page,
-// and makes sure at least one page stays shown.
-func applyPageChoice(pages []Page, shown []string) {
-	if shown != nil {
-		want := map[string]bool{}
-		for _, n := range shown {
-			want[n] = true
-		}
-		matched := false
-		for _, pg := range pages {
-			matched = matched || want[pg.Name]
-		}
-		if matched {
-			for i := range pages {
-				pages[i].Enabled = want[pages[i].Name]
-			}
-		}
+// page's saved choice, and makes sure at least one page stays shown.
+func applyPageChoice(pages []Page, choice Toggles) {
+	names := make([]string, len(pages))
+	defaults := make([]bool, len(pages))
+	for i, pg := range pages {
+		names[i], defaults[i] = pg.Name, pg.Enabled
 	}
-	for _, pg := range pages {
-		if pg.Enabled {
-			return
-		}
+	shown := false
+	for i, on := range choice.resolve(names, defaults) {
+		pages[i].Enabled = on
+		shown = shown || on
 	}
-	pages[0].Enabled = true
+	if !shown {
+		pages[0].Enabled = true
+	}
 }
 
 // loadNamedColumns fills page from a `columns:` list. enabled, when non-nil,
 // is the Settings page's saved choice for this page and overrides each
 // column's `enabled:` flag. Only enabled columns become boxes, so a hidden
 // column's widgets are never fetched.
-func loadNamedColumns(page *Page, ps pageShape, rawCols []columnShape, enabled []string, secrets map[string]string) error {
+func loadNamedColumns(page *Page, ps pageShape, rawCols []columnShape, choice Toggles, secrets map[string]string) error {
 	var cols []columnShape
 	if err := ps.Columns.Decode(&cols); err != nil {
 		return fmt.Errorf("columns: %w", err)
@@ -217,7 +209,8 @@ func loadNamedColumns(page *Page, ps pageShape, rawCols []columnShape, enabled [
 		page.MaxColumns = 3
 	}
 
-	on := make([]bool, len(cols))
+	names := make([]string, len(cols))
+	defaults := make([]bool, len(cols))
 	seen := map[string]bool{}
 	for k, c := range cols {
 		if c.Name == "" {
@@ -227,22 +220,11 @@ func loadNamedColumns(page *Page, ps pageShape, rawCols []columnShape, enabled [
 			return fmt.Errorf("column %q listed twice", c.Name)
 		}
 		seen[c.Name] = true
-		on[k] = c.Enabled == nil || *c.Enabled
+		names[k], defaults[k] = c.Name, c.Enabled == nil || *c.Enabled
 	}
-	if enabled != nil {
-		want := map[string]bool{}
-		for _, n := range enabled {
-			want[n] = true
-		}
-		override := make([]bool, len(cols))
-		matched := false
-		for k, c := range cols {
-			override[k] = want[c.Name]
-			matched = matched || override[k]
-		}
-		if matched { // a saved choice naming no current column falls back to the config's
-			on = override
-		}
+	on := choice.resolve(names, defaults)
+	if !slices.Contains(on, true) { // a choice switching every column off falls back to the config's
+		on = defaults
 	}
 
 	shown := 0

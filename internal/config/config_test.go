@@ -212,9 +212,7 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeFile(t, cfgPath, namedColumnsConfig, 0o644)
 	writeFile(t, filepath.Join(dir, "secrets.yaml"), "reddit_home: https://reddit.example/.rss\n", 0o600)
-	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Niches", "Nouvelles"}}}); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, LayoutPath(cfgPath), "columns:\n  Accueil: {Niches: true, Aujourd'hui: false}\n", 0o644)
 
 	cfg, err := Load(cfgPath)
 	if err != nil {
@@ -232,9 +230,7 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 	}
 
 	// over max_columns: the first two (config order) win
-	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Aujourd'hui", "Niches", "Nouvelles"}}}); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, LayoutPath(cfgPath), "columns:\n  Accueil: {Niches: true, Nouvelles: true, Aujourd'hui: true}\n", 0o644)
 	cfg, err = Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -243,10 +239,8 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 		t.Errorf("capped choices = %+v", c)
 	}
 
-	// a saved choice naming no current column falls back to the config's flags
-	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Gone"}}}); err != nil {
-		t.Fatal(err)
-	}
+	// switching every column off falls back to the config's flags
+	writeFile(t, LayoutPath(cfgPath), "columns:\n  Accueil: {Niches: false, Nouvelles: false, Aujourd'hui: false}\n", 0o644)
 	cfg, err = Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -335,8 +329,8 @@ func TestPageToggles(t *testing.T) {
 	}
 
 	if err := SaveLayout(LayoutPath(cfgPath), Layout{
-		Pages:   []string{"Sports"},
-		Columns: map[string][]string{"Sports": {"Scores"}},
+		Pages:   Toggles{On: map[string]bool{"Accueil": false, "Sports": true, "Media": false}},
+		Columns: map[string]Toggles{"Sports": {On: map[string]bool{"Canadiens": false, "Scores": true}}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -348,10 +342,20 @@ func TestPageToggles(t *testing.T) {
 		t.Errorf("Sports columns = %d, choices %+v", sp.Columns, sp.Choices)
 	}
 
-	// a choice naming no current page falls back to the config's flags
-	if err := SaveLayout(LayoutPath(cfgPath), Layout{Pages: []string{"Gone"}}); err != nil {
-		t.Fatal(err)
+	// a page the saved choice doesn't mention (added to the config later)
+	// follows its own `enabled:` flag
+	writeFile(t, LayoutPath(cfgPath), "pages: {Accueil: false, Sports: true}\n", 0o644)
+	if got := enabledPages(load()); len(got) != 2 || got[0] != "Sports" || got[1] != "Media" {
+		t.Errorf("new page enabled = %v", got)
 	}
+
+	// the list form written before toggles: names left out are off, and a
+	// list naming no current page falls back to the config's flags
+	writeFile(t, LayoutPath(cfgPath), "pages: [Sports]\n", 0o644)
+	if got := enabledPages(load()); len(got) != 1 || got[0] != "Sports" {
+		t.Errorf("list form enabled = %v", got)
+	}
+	writeFile(t, LayoutPath(cfgPath), "pages: [Gone]\n", 0o644)
 	if got := enabledPages(load()); len(got) != 2 {
 		t.Errorf("fallback enabled = %v", got)
 	}

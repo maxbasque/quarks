@@ -353,7 +353,6 @@ func TestSettingsLayoutSection(t *testing.T) {
 func TestLayoutSet(t *testing.T) {
 	s := layoutServer(t)
 
-	// form order doesn't matter; the saved order is the config's
 	w := postForm(t, s, "/settings/layout", url.Values{
 		"page":         {"Sports", "Accueil"},
 		"cols.Accueil": {"Aujourd'hui", "Niches"},
@@ -367,7 +366,7 @@ func TestLayoutSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "pages:\n    - Accueil\n    - Sports\ncolumns:\n    Accueil:\n        - Niches\n        - Aujourd'hui\n    Sports:\n        - Classements\n"
+	want := "pages:\n    Accueil: true\n    Media: false\n    Sports: true\ncolumns:\n    Accueil:\n        Aujourd'hui: true\n        Niches: true\n        Nouvelles: false\n    Sports:\n        Canadiens: false\n        Classements: true\n"
 	if got := string(data); got != want {
 		t.Errorf("layout.yaml =\n%s\nwant\n%s", got, want)
 	}

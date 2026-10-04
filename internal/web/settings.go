@@ -155,13 +155,13 @@ func (s *Server) handleLayoutSet(w http.ResponseWriter, r *http.Request) {
 		shown[n] = true
 	}
 
-	// config order throughout, not form order; names the config doesn't
-	// have are dropped
-	l := config.Layout{Pages: []string{}, Columns: map[string][]string{}}
+	// every page and column the config has gets an explicit on/off; names
+	// the config doesn't have are dropped
+	l := config.Layout{Pages: config.Toggles{On: map[string]bool{}}, Columns: map[string]config.Toggles{}}
+	anyPage := false
 	for _, pg := range s.meta.Load().Layout {
-		if shown[pg.Name] {
-			l.Pages = append(l.Pages, pg.Name)
-		}
+		l.Pages.On[pg.Name] = shown[pg.Name]
+		anyPage = anyPage || shown[pg.Name]
 		if len(pg.Columns) == 0 {
 			continue
 		}
@@ -169,23 +169,25 @@ func (s *Server) handleLayoutSet(w http.ResponseWriter, r *http.Request) {
 		for _, c := range r.Form["cols."+pg.Name] {
 			want[c] = true
 		}
-		var cols []string
+		cols := config.Toggles{On: map[string]bool{}}
+		n := 0
 		for _, c := range pg.Columns {
+			cols.On[c.Name] = want[c.Name]
 			if want[c.Name] {
-				cols = append(cols, c.Name)
+				n++
 			}
 		}
 		switch {
-		case len(cols) == 0:
+		case n == 0:
 			http.Redirect(w, r, "/settings?lerr=no_columns#layout", http.StatusSeeOther)
 			return
-		case len(cols) > pg.MaxColumns:
+		case n > pg.MaxColumns:
 			http.Redirect(w, r, "/settings?lerr=too_many#layout", http.StatusSeeOther)
 			return
 		}
 		l.Columns[pg.Name] = cols
 	}
-	if len(l.Pages) == 0 {
+	if !anyPage {
 		http.Redirect(w, r, "/settings?lerr=no_pages#layout", http.StatusSeeOther)
 		return
 	}
