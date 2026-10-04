@@ -64,8 +64,8 @@ func TestFetch(t *testing.T) {
 	if w.Current != 15.3 || w.FeelsLike != 14.3 {
 		t.Errorf("current = %v / feels %v", w.Current, w.FeelsLike)
 	}
-	if w.Condition != "Overcast" {
-		t.Errorf("Condition = %q, want Overcast (code 3)", w.Condition)
+	if w.Condition != "Couvert" {
+		t.Errorf("Condition = %q, want Couvert (code 3)", w.Condition)
 	}
 	if w.Today.High != 22.3 || w.Today.Low != 14.5 {
 		t.Errorf("today = %v/%v", w.Today.High, w.Today.Low)
@@ -73,7 +73,7 @@ func TestFetch(t *testing.T) {
 	if len(w.Forecast) != 4 {
 		t.Fatalf("forecast has %d days, want 4 (today excluded)", len(w.Forecast))
 	}
-	if w.Forecast[0].Condition != "Rain" { // code 65
+	if w.Forecast[0].Condition != "Pluie" { // code 65
 		t.Errorf("forecast[0] condition = %q", w.Forecast[0].Condition)
 	}
 }

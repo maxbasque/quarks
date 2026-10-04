@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/fr"
 )
 
 const (
@@ -154,13 +155,13 @@ func (p *Provider) fetchSchedule(ctx context.Context) (core.Payload, error) {
 
 func (p *Provider) scheduleItem(g game, start time.Time, loc *time.Location) core.Item {
 	us, them := g.Home, g.Away
-	title := "vs " + them.name()
+	title := "c. " + them.name()
 	if g.Away.Abbrev == p.team {
 		us, them = g.Away, g.Home
 		title = "@ " + them.name()
 	}
 
-	summary := start.In(loc).Format("Mon Jan 2, 3:04 PM")
+	summary := fr.DateTime(start.In(loc))
 	if extra := gameExtra(g, us, them); extra != "" {
 		summary += "  ·  " + extra
 	}
@@ -184,11 +185,11 @@ func gameExtra(g game, us, them team) string {
 		r := fmt.Sprintf("%d–%d", *us.Score, *them.Score)
 		switch {
 		case live:
-			return "Live " + r
+			return "En cours " + r
 		case *us.Score > *them.Score:
-			return "Won " + r
+			return "Victoire " + r
 		case *us.Score < *them.Score:
-			return "Lost " + r
+			return "Défaite " + r
 		default:
 			return "Final " + r
 		}
@@ -199,9 +200,9 @@ func gameExtra(g game, us, them team) string {
 func gameTypeLabel(t int) string {
 	switch t {
 	case 1:
-		return "Preseason"
+		return "Préparatoire"
 	case 3:
-		return "Playoffs"
+		return "Séries"
 	default:
 		return ""
 	}
@@ -262,17 +263,17 @@ func scoreItem(g game) core.Item {
 	state := "Final"
 	switch {
 	case g.GameState == "LIVE" || g.GameState == "CRIT":
-		state = "Live"
+		state = "En cours"
 	case g.GameOutcome.LastPeriodType == "OT":
-		state = "Final (OT)"
+		state = "Final (prol.)"
 	case g.GameOutcome.LastPeriodType == "SO":
-		state = "Final (SO)"
+		state = "Final (t.b.)"
 	}
 
 	start, _ := time.Parse(time.RFC3339, g.StartTimeUTC)
 	summary := state
 	if !start.IsZero() {
-		summary += "  ·  " + start.Local().Format("Mon Jan 2")
+		summary += "  ·  " + fr.Date(start.Local())
 	}
 
 	return core.Item{

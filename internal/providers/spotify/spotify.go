@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/fr"
 	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
 
@@ -113,7 +114,7 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 	return core.Feed(items), nil
 }
 
-// summarize renders e.g. "Album · Live · 13 Oct 2026" or "EP · Nov 2026".
+// summarize renders e.g. "Album · Live · 13 oct. 2026" or "EP · nov. 2026".
 func summarize(r releaseEntry) string {
 	parts := []string{"Album"}
 	if r.class == "eps" {
@@ -122,11 +123,11 @@ func summarize(r releaseEntry) string {
 	parts = append(parts, r.rg.SecondaryTypes...)
 	switch r.precision {
 	case "day":
-		parts = append(parts, r.date.Format("2 Jan 2006"))
+		parts = append(parts, fr.DayMonthYear(r.date))
 	case "month":
-		parts = append(parts, r.date.Format("Jan 2006"))
+		parts = append(parts, fr.MonthYear(r.date))
 	case "year":
-		parts = append(parts, r.date.Format("2006")+", date TBA")
+		parts = append(parts, r.date.Format("2006")+", date à venir")
 	}
 	return strings.Join(parts, " · ")
 }

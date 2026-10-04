@@ -28,35 +28,35 @@ type WeatherDay struct {
 func WMOCondition(code int) string {
 	switch code {
 	case 0:
-		return "Clear"
+		return "Dégagé"
 	case 1:
-		return "Mainly clear"
+		return "Généralement dégagé"
 	case 2:
-		return "Partly cloudy"
+		return "Partiellement nuageux"
 	case 3:
-		return "Overcast"
+		return "Couvert"
 	case 45, 48:
-		return "Fog"
+		return "Brouillard"
 	case 51, 53, 55:
-		return "Drizzle"
+		return "Bruine"
 	case 56, 57:
-		return "Freezing drizzle"
+		return "Bruine verglaçante"
 	case 61, 63, 65:
-		return "Rain"
+		return "Pluie"
 	case 66, 67:
-		return "Freezing rain"
+		return "Pluie verglaçante"
 	case 71, 73, 75:
-		return "Snow"
+		return "Neige"
 	case 77:
-		return "Snow grains"
+		return "Neige en grains"
 	case 80, 81, 82:
-		return "Rain showers"
+		return "Averses de pluie"
 	case 85, 86:
-		return "Snow showers"
+		return "Averses de neige"
 	case 95:
-		return "Thunderstorm"
+		return "Orages"
 	case 96, 99:
-		return "Thunderstorm, hail"
+		return "Orages avec grêle"
 	default:
 		return "—"
 	}

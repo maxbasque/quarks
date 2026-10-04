@@ -21,6 +21,7 @@ import (
 
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/fr"
 	"github.com/maxbasque/quarks/internal/reader"
 	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
@@ -96,7 +97,7 @@ func NewServer(store *core.Store, refresh func(key string) bool, secretsPath, la
 		"ago":   ago,
 		"temp":  temp,
 		"wicon": weatherIcon,
-		"day":   func(t time.Time) string { return t.Format("Mon") },
+		"day":   fr.Day,
 	}).ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, err
@@ -247,7 +248,7 @@ type tabVM struct {
 	Items     []core.Item
 	Weather   *core.Weather
 	Standings *core.Standings
-	Badge     string // "", "stale · 14m", "offline"
+	Badge     string // "", "en retard · 14 min", "hors ligne"
 	Fresh     string // "updated 3m ago" / "never updated"
 	Danger    bool
 }
@@ -373,11 +374,11 @@ func (s *Server) buildIndexVM() indexVM {
 
 				switch ttl := meta.TTLs[key]; {
 				case len(st.Items) == 0 && st.Weather == nil && st.Standings == nil && st.LastErr != "":
-					tv.Badge, tv.Danger = "offline", true
+					tv.Badge, tv.Danger = "hors ligne", true
 				case st.LastErr != "":
-					tv.Badge = "stale · " + compactSince(st.LastOK)
+					tv.Badge = "en retard · " + compactSince(st.LastOK)
 				case ttl > 0 && st.Stale(ttl*2):
-					tv.Badge = "stale · " + compactSince(st.LastOK)
+					tv.Badge = "en retard · " + compactSince(st.LastOK)
 				}
 				bv.Danger = bv.Danger || tv.Danger
 				bv.Tabs = append(bv.Tabs, tv)
@@ -393,7 +394,7 @@ func (s *Server) buildIndexVM() indexVM {
 
 		name := pg.Name
 		if name == "" {
-			name = "Home"
+			name = "Accueil"
 		}
 		vm.Pages = append(vm.Pages, pageVM{
 			Name:     name,
@@ -418,16 +419,16 @@ func pageSlug(name string, i int) string {
 func freshLabel(t time.Time) string {
 	switch {
 	case t.IsZero():
-		return "never updated"
+		return "jamais mis à jour"
 	case time.Since(t) < time.Minute:
-		return "updated just now"
+		return "mis à jour à l'instant"
 	default:
-		return "updated " + compactSince(t) + " ago"
+		return "mis à jour il y a " + compactSince(t)
 	}
 }
 
-// ago renders an item timestamp, past or future ("3h ago" / "in 2d"); client JS
-// keeps it current after load.
+// ago renders an item timestamp, past or future ("il y a 3 h" / "dans 2 j");
+// client JS keeps it current after load.
 func ago(t time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -438,23 +439,23 @@ func ago(t time.Time) string {
 		d = -d
 	}
 	if future && d < time.Hour {
-		return "just now" // small future offset = clock skew, not a real schedule
+		return "à l'instant" // small future offset = clock skew, not a real schedule
 	}
 	var v string
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return "à l'instant"
 	case d < time.Hour:
-		v = strconv.Itoa(int(d.Minutes())) + "m"
+		v = strconv.Itoa(int(d.Minutes())) + " min"
 	case d < 24*time.Hour:
-		v = strconv.Itoa(int(d.Hours())) + "h"
+		v = strconv.Itoa(int(d.Hours())) + " h"
 	default:
-		v = strconv.Itoa(int(d.Hours()/24)) + "d"
+		v = strconv.Itoa(int(d.Hours()/24)) + " j"
 	}
 	if future {
-		return "in " + v
+		return "dans " + v
 	}
-	return v + " ago"
+	return "il y a " + v
 }
 
 // temp rounds a Celsius value to a whole-degree string like "15°".
@@ -490,17 +491,17 @@ func weatherIcon(code int) string {
 	}
 }
 
-// compactSince is a short "3m" / "5h" / "2d" duration.
+// compactSince is a short "3 min" / "5 h" / "2 j" duration.
 func compactSince(t time.Time) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "0m"
+		return "0 min"
 	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m"
+		return strconv.Itoa(int(d.Minutes())) + " min"
 	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + "h"
+		return strconv.Itoa(int(d.Hours())) + " h"
 	default:
-		return strconv.Itoa(int(d.Hours()/24)) + "d"
+		return strconv.Itoa(int(d.Hours()/24)) + " j"
 	}
 }

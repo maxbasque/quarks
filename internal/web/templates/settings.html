@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Settings · Quark's</title>
+  <title>Paramètres · Quark's</title>
   <link rel="icon" href="/static/favicon.svg">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="settings-page">
   <div class="settings__shell">
     <nav class="settings__nav">
-      <a href="/" class="settings__back">← dashboard</a>
+      <a href="/" class="settings__back">← tableau de bord</a>
       <div class="settings__navlinks">
         {{ range .Sections }}
         <a href="#{{ .ID }}" class="settings__navlink">
@@ -22,12 +22,12 @@
     </nav>
 
     <main class="settings__main">
-      <h1 class="settings__title">Settings</h1>
+      <h1 class="settings__title">Paramètres</h1>
 
       {{ if .Layout.Pages }}
       <section id="layout" class="settings__card">
-        <h2 class="settings__card-title">Pages &amp; columns</h2>
-        <p class="settings__status">Pick which pages appear in the title bar, and which columns each one shows.</p>
+        <h2 class="settings__card-title">Pages et colonnes</h2>
+        <p class="settings__status">Choisissez les pages affichées dans la barre du haut, et les colonnes de chacune.</p>
         {{ if .Layout.Error }}<p class="settings__status settings__status--err">{{ .Layout.Error }}</p>{{ end }}
 
         <form method="post" action="/settings/layout" class="settings__layout">
@@ -39,13 +39,13 @@
             </label>
             {{ if .Columns }}
             <div class="settings__cols" data-max="{{ .Max }}">
-              <p class="settings__layout-max">Columns — up to {{ .Max }}</p>
+              <p class="settings__layout-max">Colonnes — jusqu’à {{ .Max }}</p>
               {{ range .Columns }}
               <label class="settings__check">
                 <input type="checkbox" name="cols.{{ $p.Name }}" value="{{ .Name }}"{{ if .Enabled }} checked{{ end }}>
                 <span>{{ .Name }}</span>
                 {{ if .MissingSecrets }}
-                <span class="settings__check-note">needs {{ range $i, $k := .MissingSecrets }}{{ if $i }}, {{ end }}<code>{{ $k }}</code>{{ end }} — add it under <a href="#secrets">Secrets</a></span>
+                <span class="settings__check-note">requiert {{ range $i, $k := .MissingSecrets }}{{ if $i }}, {{ end }}<code>{{ $k }}</code>{{ end }} — ajoutez-la sous <a href="#secrets">Clés secrètes</a></span>
                 {{ end }}
               </label>
               {{ end }}
@@ -53,59 +53,59 @@
             {{ end }}
           </div>
           {{ end }}
-          <noscript><button class="settings__btn" type="submit">Save</button></noscript>
+          <noscript><button class="settings__btn" type="submit">Enregistrer</button></noscript>
         </form>
       </section>
       {{ end }}
 
       <section id="spotify" class="settings__card">
-        <h2 class="settings__card-title">Spotify — upcoming releases</h2>
+        <h2 class="settings__card-title">Spotify — sorties à venir</h2>
         <p class="settings__status{{ if .Spotify.Connected }} settings__status--ok{{ end }}">{{ .Spotify.StatusLine }}</p>
         {{ if .Spotify.Error }}<p class="settings__status settings__status--err">{{ .Spotify.Error }}</p>{{ end }}
 
         <form method="post" action="/settings/spotify/credentials">
           <div class="settings__field">
-            <label for="spotify_client_id">Client ID{{ if .Spotify.ClientIDSet }} (configured — leave blank to keep){{ end }}</label>
+            <label for="spotify_client_id">Client ID{{ if .Spotify.ClientIDSet }} (configuré — laissez vide pour le conserver){{ end }}</label>
             <input id="spotify_client_id" type="text" name="client_id" autocomplete="off" spellcheck="false">
           </div>
           <div class="settings__field">
-            <label for="spotify_client_secret">Client Secret{{ if .Spotify.ClientSecretSet }} (configured — leave blank to keep){{ end }}</label>
+            <label for="spotify_client_secret">Client Secret{{ if .Spotify.ClientSecretSet }} (configuré — laissez vide pour le conserver){{ end }}</label>
             <input id="spotify_client_secret" type="password" name="client_secret" autocomplete="off">
           </div>
-          <button class="settings__btn" type="submit">Save</button>
+          <button class="settings__btn" type="submit">Enregistrer</button>
         </form>
 
         <p class="settings__status">
-          Create an app at
+          Créez une application sur
           <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">developer.spotify.com/dashboard</a>
-          and register this exact redirect URI:
+          et enregistrez exactement cette adresse de redirection (redirect URI) :
         </p>
         <p class="settings__snippet">{{ .Spotify.RedirectURI }}</p>
 
         {{ if and .Spotify.ClientIDSet .Spotify.ClientSecretSet }}
         <p>
           <a class="settings__btn settings__btn--link" href="/settings/spotify/authorize">
-            {{ if .Spotify.Connected }}Reconnect{{ else }}Connect{{ end }} with Spotify
+            {{ if .Spotify.Connected }}Reconnecter{{ else }}Connecter{{ end }} Spotify
           </a>
         </p>
         {{ end }}
 
         {{ if .Spotify.Connected }}
         <form method="post" action="/settings/spotify/disconnect">
-          <button class="settings__btn" type="submit">Disconnect</button>
+          <button class="settings__btn" type="submit">Déconnecter</button>
         </form>
 
-        <p class="settings__status">Add a Media tab by pasting this into <code>config.yaml</code>:</p>
+        <p class="settings__status">Pour ajouter un onglet Media, collez ceci dans <code>config.yaml</code> :</p>
         <p class="settings__snippet">{{ .Spotify.MediaSnippet }}</p>
         {{ end }}
       </section>
 
       <section id="secrets" class="settings__card">
-        <h2 class="settings__card-title">Secrets</h2>
+        <h2 class="settings__card-title">Clés secrètes</h2>
         <p class="settings__status">
-          Anything else a widget references from <code>config.yaml</code> as
-          <code>${secret:key}</code> — a Reddit feed URL, a calendar link, and
-          so on. Spotify's own credentials live in the section above.
+          Tout ce qu’un module de <code>config.yaml</code> appelle par
+          <code>${secret:clé}</code> — l’adresse de votre fil Reddit, un lien de
+          calendrier, etc. Les identifiants Spotify sont dans la section ci-dessus.
         </p>
         {{ if .Secrets.Error }}<p class="settings__status settings__status--err">{{ .Secrets.Error }}</p>{{ end }}
 
@@ -116,27 +116,27 @@
             <code>{{ . }}</code>
             <form method="post" action="/settings/secrets/delete">
               <input type="hidden" name="key" value="{{ . }}">
-              <button class="settings__btn settings__btn--danger" type="submit">Remove</button>
+              <button class="settings__btn settings__btn--danger" type="submit">Retirer</button>
             </form>
           </li>
           {{ end }}
         </ul>
         {{ else }}
-        <p class="settings__status">No other secrets yet.</p>
+        <p class="settings__status">Aucune autre clé pour l’instant.</p>
         {{ end }}
 
         <form method="post" action="/settings/secrets/set">
           <div class="settings__field">
-            <label for="secret_key">Key</label>
+            <label for="secret_key">Clé</label>
             <input id="secret_key" type="text" name="key" placeholder="reddit_home" autocomplete="off" spellcheck="false">
           </div>
           <div class="settings__field">
-            <label for="secret_value">Value</label>
+            <label for="secret_value">Valeur</label>
             <input id="secret_value" type="password" name="value" autocomplete="off">
           </div>
-          <button class="settings__btn" type="submit">Add / update</button>
+          <button class="settings__btn" type="submit">Ajouter / modifier</button>
         </form>
-        <p class="settings__status">Adding a key that already exists overwrites its value.</p>
+        <p class="settings__status">Ajouter une clé qui existe déjà remplace sa valeur.</p>
       </section>
     </main>
   </div>

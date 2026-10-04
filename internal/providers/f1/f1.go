@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/fr"
 )
 
 const userAgent = "Mozilla/5.0 (compatible; quarks/0.1; +https://github.com/maxbasque/quarks)"
@@ -177,7 +178,7 @@ func (p *Provider) fetchSchedule(ctx context.Context) (core.Payload, error) {
 			ID:          "f1-" + r.Round,
 			Title:       r.RaceName,
 			URL:         r.URL,
-			Source:      "Round " + r.Round,
+			Source:      "Manche " + r.Round,
 			PublishedAt: start,
 		}
 		if start.Add(raceLength).After(now) {
@@ -185,7 +186,7 @@ func (p *Provider) fetchSchedule(ctx context.Context) (core.Payload, error) {
 				name string
 				at   time.Time
 			}
-			sessions := []sess{{"Qualifying", r.Qualifying.at()}, {"Sprint", r.Sprint.at()}, {"Race", start}}
+			sessions := []sess{{"Qualifs", r.Qualifying.at()}, {"Sprint", r.Sprint.at()}, {"Course", start}}
 			sort.SliceStable(sessions, func(i, j int) bool { return sessions[i].at.Before(sessions[j].at) })
 			var parts []string
 			for _, ss := range sessions {
@@ -208,9 +209,9 @@ func (p *Provider) fetchSchedule(ctx context.Context) (core.Payload, error) {
 	return core.Feed(append(upcoming, past...)), nil
 }
 
-// localTime is a session start in the machine's time zone: "Sat Oct 3 22:00".
+// localTime is a session start in the machine's time zone: "sam. 3 oct., 22 h 00".
 func localTime(t time.Time) string {
-	return t.Local().Format("Mon Jan 2 15:04")
+	return fr.DateTime(t.Local())
 }
 
 // ---- standings -------------------------------------------------------------
@@ -235,9 +236,9 @@ func (p *Provider) fetchDrivers(ctx context.Context) (core.Payload, error) {
 	if err := p.get(ctx, "/driverStandings.json", &data); err != nil {
 		return core.Payload{}, fmt.Errorf("f1 driver standings: %w", err)
 	}
-	g := core.StandingsGroup{Columns: []string{"TEAM", "PTS", "W"}}
+	g := core.StandingsGroup{Columns: []string{"ÉCURIE", "PTS", "V"}}
 	if lists := data.MRData.StandingsTable.StandingsLists; len(lists) > 0 {
-		g.Name = "After round " + lists[0].Round
+		g.Name = "Après la manche " + lists[0].Round
 		for i, d := range lists[0].DriverStandings {
 			team := ""
 			if len(d.Constructors) > 0 {
@@ -274,9 +275,9 @@ func (p *Provider) fetchConstructors(ctx context.Context) (core.Payload, error) 
 	if err := p.get(ctx, "/constructorStandings.json", &data); err != nil {
 		return core.Payload{}, fmt.Errorf("f1 constructor standings: %w", err)
 	}
-	g := core.StandingsGroup{Columns: []string{"PTS", "W"}}
+	g := core.StandingsGroup{Columns: []string{"PTS", "V"}}
 	if lists := data.MRData.StandingsTable.StandingsLists; len(lists) > 0 {
-		g.Name = "After round " + lists[0].Round
+		g.Name = "Après la manche " + lists[0].Round
 		for i, c := range lists[0].ConstructorStandings {
 			g.Rows = append(g.Rows, core.StandingsRow{
 				Rank:      rank(c.Position, i),

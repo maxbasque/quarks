@@ -26,7 +26,7 @@ const mediaSnippet = `- name: Media
   columns: 1
   widgets:
     - type: spotify
-      title: Upcoming releases
+      title: Sorties à venir
       column: 1
       ttl: 15m
       client_id: "${secret:spotify_client_id}"
@@ -49,11 +49,11 @@ type spotifyStatus struct {
 }
 
 var settingsErrors = map[string]string{
-	"no_credentials": "Save a Client ID and Client Secret first.",
-	"denied":         "Spotify authorization was cancelled or denied.",
-	"state_mismatch": "That authorization link expired or was already used — try connecting again.",
-	"exchange_failed": "Spotify rejected the authorization code — double-check the Client ID/Secret " +
-		"and that the redirect URI below is registered exactly in your Spotify app settings.",
+	"no_credentials": "Enregistrez d’abord un Client ID et un Client Secret.",
+	"denied":         "L’autorisation Spotify a été annulée ou refusée.",
+	"state_mismatch": "Ce lien d’autorisation a expiré ou a déjà servi — reconnectez-vous.",
+	"exchange_failed": "Spotify a refusé le code d’autorisation — vérifiez le Client ID et le Client Secret, " +
+		"ainsi que l’adresse de redirection ci-dessous, inscrite telle quelle dans votre application Spotify.",
 }
 
 // reservedSecretKeys are managed by their own dedicated section (Spotify's
@@ -71,10 +71,10 @@ var reservedSecretKeys = map[string]bool{
 var secretKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 var secretsErrors = map[string]string{
-	"bad_key":      "Key names must be lowercase letters, numbers, and underscores, starting with a letter.",
-	"reserved_key": "That key is managed by the Spotify section above.",
-	"empty_value":  "Enter a value to save.",
-	"bad_value":    "Values can't contain quotes, backslashes or line breaks.",
+	"bad_key":      "Le nom d’une clé ne contient que des minuscules, des chiffres et des _, et commence par une lettre.",
+	"reserved_key": "Cette clé est gérée par la section Spotify ci-dessus.",
+	"empty_value":  "Entrez une valeur à enregistrer.",
+	"bad_value":    "Une valeur ne peut pas contenir de guillemets, de barres obliques inverses ni de retours à la ligne.",
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -102,11 +102,11 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			layout.Error = layoutErrors[code]
 		}
 		vm.Layout = layout
-		vm.Sections = append(vm.Sections, sectionVM{ID: "layout", Label: "Pages & columns", Status: layout.StatusLine()})
+		vm.Sections = append(vm.Sections, sectionVM{ID: "layout", Label: "Pages et colonnes", Status: layout.StatusLine()})
 	}
 	vm.Sections = append(vm.Sections,
 		sectionVM{ID: "spotify", Label: "Spotify", Status: sp.StatusLine()},
-		sectionVM{ID: "secrets", Label: "Secrets", Status: secrets.StatusLine()},
+		sectionVM{ID: "secrets", Label: "Clés secrètes", Status: secrets.StatusLine()},
 	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -132,9 +132,9 @@ func (s *Server) layoutVM() layoutSettingsVM {
 }
 
 var layoutErrors = map[string]string{
-	"no_pages":   "Keep at least one page.",
-	"no_columns": "Each page needs at least one column.",
-	"too_many":   "That's more columns than this page allows.",
+	"no_pages":   "Gardez au moins une page.",
+	"no_columns": "Chaque page doit garder au moins une colonne.",
+	"too_many":   "C’est plus de colonnes que cette page n’en permet.",
 }
 
 // handleLayoutSet saves which pages, and which named columns of each, are
@@ -240,7 +240,7 @@ func (s *Server) spotifySettingsVM(r *http.Request) spotifySettingsVM {
 		// or it was revoked on Spotify's side) — still "connected" as far as
 		// config goes, just flag it rather than silently claiming success.
 		sp.Connected = true
-		sp.Error = "Connected, but the last check failed: " + status.err
+		sp.Error = "Connecté, mais la dernière vérification a échoué : " + status.err
 		sp.MediaSnippet = mediaSnippet
 	}
 	return sp
@@ -468,7 +468,7 @@ func (lv layoutSettingsVM) StatusLine() string {
 			shown++
 		}
 	}
-	return fmt.Sprintf("%d of %d pages shown", shown, len(lv.Pages))
+	return fmt.Sprintf("%d pages sur %d affichées", shown, len(lv.Pages))
 }
 
 type sectionVM struct {
@@ -484,9 +484,9 @@ type secretsSettingsVM struct {
 
 func (sv secretsSettingsVM) StatusLine() string {
 	if len(sv.Keys) == 1 {
-		return "1 configured"
+		return "1 configurée"
 	}
-	return fmt.Sprintf("%d configured", len(sv.Keys))
+	return fmt.Sprintf("%d configurées", len(sv.Keys))
 }
 
 type spotifySettingsVM struct {
@@ -502,12 +502,12 @@ type spotifySettingsVM struct {
 func (sp spotifySettingsVM) StatusLine() string {
 	switch {
 	case sp.Connected && sp.DisplayName != "":
-		return "Connected as " + sp.DisplayName
+		return "Connecté : " + sp.DisplayName
 	case sp.Connected:
-		return "Connected"
+		return "Connecté"
 	case sp.ClientIDSet && sp.ClientSecretSet:
-		return "App registered — not connected"
+		return "Application inscrite — non connectée"
 	default:
-		return "Not configured"
+		return "Non configuré"
 	}
 }

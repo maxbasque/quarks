@@ -1,7 +1,7 @@
 {
   "name": "Quark's",
   "short_name": "Quark's",
-  "description": "Personal feed dashboard",
+  "description": "Tableau de bord personnel",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

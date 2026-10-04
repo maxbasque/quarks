@@ -53,8 +53,8 @@ func TestNHL(t *testing.T) {
 		t.Fatalf("want 2 groups, got %+v", s)
 	}
 	atl := s.Groups[0]
-	if atl.Name != "Atlantic" || len(atl.Rows) != 2 {
-		t.Fatalf("Atlantic = %q, %d rows", atl.Name, len(atl.Rows))
+	if atl.Name != "Atlantique" || len(atl.Rows) != 2 {
+		t.Fatalf("Atlantique = %q, %d rows", atl.Name, len(atl.Rows))
 	}
 	// sorted by divisionSequence: MTL (1) then TOR (2)
 	if atl.Rows[0].Abbrev != "MTL" || atl.Rows[0].Rank != 1 || !atl.Rows[0].Highlight {
@@ -88,7 +88,7 @@ func TestMLB(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	g := got.Standings.Groups[0]
-	if g.Name != "AL East" {
+	if g.Name != "AL Est" {
 		t.Errorf("group name = %q", g.Name)
 	}
 	if g.Rows[0].Team != "Yankees" || !g.Rows[0].Highlight {

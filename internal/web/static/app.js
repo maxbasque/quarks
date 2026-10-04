@@ -1,6 +1,6 @@
 // Progressive enhancement only. Without this file the dashboard still renders;
 // it just won't tick times, switch tabs, refresh in place, or show the inline
-// reader (the "read here" links still open as standalone pages).
+// reader (the "lire ici" links still open as standalone pages).
 (() => {
   "use strict";
 
@@ -12,13 +12,13 @@
     let s = (Date.now() - new Date(iso).getTime()) / 1000;
     const future = s < 0;
     s = Math.abs(s);
-    if (future && s < 3600) return "just now"; // small future offset = clock skew
+    if (future && s < 3600) return "à l’instant"; // small future offset = clock skew
     let v;
-    if (s < 60) return "just now";
-    if (s < 3600) v = Math.floor(s / 60) + "m";
-    else if (s < 86400) v = Math.floor(s / 3600) + "h";
-    else v = Math.floor(s / 86400) + "d";
-    return future ? "in " + v : v + " ago";
+    if (s < 60) return "à l’instant";
+    if (s < 3600) v = Math.floor(s / 60) + " min";
+    else if (s < 86400) v = Math.floor(s / 3600) + " h";
+    else v = Math.floor(s / 86400) + " j";
+    return future ? "dans " + v : "il y a " + v;
   };
   const tickTimes = () => {
     document.querySelectorAll("time[datetime]").forEach((el) => {
@@ -154,17 +154,17 @@
 
     const panel = document.createElement("li");
     panel.className = "reader-panel";
-    panel.innerHTML = '<span class="reader-panel__loading">Extracting…</span>';
+    panel.innerHTML = '<span class="reader-panel__loading">Extraction…</span>';
     item.after(panel);
     openReaders++;
 
     try {
       const html = await (await fetch(readLink.getAttribute("href"), { cache: "no-store" })).text();
       const article = new DOMParser().parseFromString(html, "text/html").querySelector(".reader__article");
-      panel.innerHTML = article ? article.innerHTML : '<p class="reader__err">No content.</p>';
+      panel.innerHTML = article ? article.innerHTML : '<p class="reader__err">Aucun contenu.</p>';
       panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
     } catch (_) {
-      panel.innerHTML = '<p class="reader__err">Couldn’t load the reader.</p>';
+      panel.innerHTML = '<p class="reader__err">Impossible de charger l’article.</p>';
     }
   }
 
@@ -223,7 +223,7 @@
   const showSync = () => {
     if (!sync) return;
     sync.hidden = false;
-    sync.textContent = "synced " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    sync.textContent = "synchro " + new Date().toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" });
   };
 
   let refreshing = false;

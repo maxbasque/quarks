@@ -123,6 +123,9 @@ func (p *Provider) fetchNHL(ctx context.Context) (core.Payload, error) {
 		default:
 			name, seq = t.DivisionName, t.DivisionSeq
 		}
+		if fr, ok := nhlGroupNames[name]; ok {
+			name = fr
+		}
 		if _, ok := groups[name]; !ok {
 			order = append(order, name)
 		}
@@ -144,7 +147,7 @@ func (p *Provider) fetchNHL(ctx context.Context) (core.Payload, error) {
 	for _, name := range order {
 		rs := groups[name]
 		sort.Slice(rs, func(i, j int) bool { return rs[i].seq < rs[j].seq })
-		g := core.StandingsGroup{Name: name, Columns: []string{"GP", "W-L-OT", "PTS", "STRK"}}
+		g := core.StandingsGroup{Name: name, Columns: []string{"PJ", "V-D-DP", "PTS", "SÉQ"}}
 		for i, r := range rs {
 			r.r.Rank = i + 1
 			g.Rows = append(g.Rows, r.r)
@@ -154,14 +157,21 @@ func (p *Provider) fetchNHL(ctx context.Context) (core.Payload, error) {
 	return core.Payload{Standings: st}, nil
 }
 
+// nhlGroupNames puts the API's division and conference names in French.
+var nhlGroupNames = map[string]string{
+	"Atlantic": "Atlantique", "Metropolitan": "Métropolitaine",
+	"Central": "Centrale", "Pacific": "Pacifique",
+	"Eastern": "Association de l’Est", "Western": "Association de l’Ouest",
+}
+
 // ---- MLB -----------------------------------------------------------------
 
 var mlbDivisions = map[int]struct {
 	name  string
 	order int
 }{
-	201: {"AL East", 0}, 202: {"AL Central", 1}, 200: {"AL West", 2},
-	204: {"NL East", 3}, 205: {"NL Central", 4}, 203: {"NL West", 5},
+	201: {"AL Est", 0}, 202: {"AL Centrale", 1}, 200: {"AL Ouest", 2},
+	204: {"NL Est", 3}, 205: {"NL Centrale", 4}, 203: {"NL Ouest", 5},
 }
 
 func (p *Provider) fetchMLB(ctx context.Context) (core.Payload, error) {
@@ -192,7 +202,7 @@ func (p *Provider) fetchMLB(ctx context.Context) (core.Payload, error) {
 
 	st := &core.Standings{}
 	for _, rec := range data.Records {
-		g := core.StandingsGroup{Name: mlbDivisions[rec.Division.ID].name, Columns: []string{"W-L", "PCT", "GB", "STRK"}}
+		g := core.StandingsGroup{Name: mlbDivisions[rec.Division.ID].name, Columns: []string{"V-D", "PCT", "ÉCART", "SÉQ"}}
 		rows := rec.TeamRecords
 		sort.Slice(rows, func(i, j int) bool { return atoi(rows[i].DivisionRank) < atoi(rows[j].DivisionRank) })
 		for i, t := range rows {

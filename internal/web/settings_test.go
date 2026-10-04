@@ -58,8 +58,8 @@ func TestSettingsPageNotConfigured(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "Not configured") {
-		t.Errorf("expected \"Not configured\", got:\n%s", w.Body.String())
+	if !strings.Contains(w.Body.String(), "Non configuré") {
+		t.Errorf("expected \"Non configuré\", got:\n%s", w.Body.String())
 	}
 }
 
@@ -186,8 +186,8 @@ func TestSpotifyCallbackSuccessWritesSecretAndReloads(t *testing.T) {
 	}
 
 	page := get(t, s, "/settings")
-	if !strings.Contains(page.Body.String(), "Connected as Max") {
-		t.Errorf("expected \"Connected as Max\":\n%s", page.Body.String())
+	if !strings.Contains(page.Body.String(), "Connecté : Max") {
+		t.Errorf("expected \"Connecté : Max\":\n%s", page.Body.String())
 	}
 }
 
@@ -342,7 +342,7 @@ func TestSettingsLayoutSection(t *testing.T) {
 	body := get(t, s, "/settings").Body.String()
 	for _, want := range []string{
 		`id="layout"`, `name="page" value="Media"`, `name="cols.Accueil" value="Niches"`,
-		`name="cols.Sports" value="Canadiens"`, `<code>reddit_home</code>`, `data-max="2"`, "2 of 3 pages shown",
+		`name="cols.Sports" value="Canadiens"`, `<code>reddit_home</code>`, `data-max="2"`, "2 pages sur 3 affichées",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings page missing %q", want)

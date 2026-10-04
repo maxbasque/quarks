@@ -63,13 +63,13 @@ func TestFetch(t *testing.T) {
 		t.Fatalf("want 1 item, got %d: %+v", len(got.Items), got.Items)
 	}
 	it := got.Items[0]
-	if it.Title != "vs Senators" {
+	if it.Title != "c. Senators" {
 		t.Errorf("title = %q (MTL home vs OTT)", it.Title)
 	}
-	if !strings.Contains(it.Summary, "Bell Centre") || !strings.Contains(it.Summary, ":") {
+	if !strings.Contains(it.Summary, "Bell Centre") || !strings.Contains(it.Summary, " h ") {
 		t.Errorf("summary should carry the date + venue, got %q", it.Summary)
 	}
-	if it.Source != "Preseason" {
+	if it.Source != "Préparatoire" {
 		t.Errorf("source = %q", it.Source)
 	}
 	if it.Thumbnail != "ott.svg" {
@@ -118,7 +118,7 @@ func TestScores(t *testing.T) {
 	if it.Title != "MTL 4 – 3 TOR" {
 		t.Errorf("title = %q", it.Title)
 	}
-	if !strings.HasPrefix(it.Summary, "Final (OT)") {
+	if !strings.HasPrefix(it.Summary, "Final (prol.)") {
 		t.Errorf("summary = %q", it.Summary)
 	}
 	if it.Thumbnail != "mtl.svg" {

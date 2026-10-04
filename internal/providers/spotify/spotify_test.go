@@ -9,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/fr"
 )
 
 func widgetConfig(t *testing.T, src string) core.WidgetConfig {
@@ -103,7 +104,7 @@ func TestFetchMapsSnapshotToItems(t *testing.T) {
 	if it.ID != "rg1" || it.Title != "New Album" || it.Source != "Some Artist" || it.URL != "https://musicbrainz.org/release-group/rg1" {
 		t.Errorf("unexpected item: %+v", it)
 	}
-	if want := "Album · Live · " + day.Format("2 Jan 2006"); it.Summary != want {
+	if want := "Album · Live · " + fr.DayMonthYear(day); it.Summary != want {
 		t.Errorf("Summary = %q, want %q", it.Summary, want)
 	}
 	if !it.PublishedAt.Equal(e.date) {
@@ -123,7 +124,7 @@ func TestFetchImpreciseDateHasNoCountdown(t *testing.T) {
 	if !got.Items[0].PublishedAt.IsZero() {
 		t.Error("a month-only date must not render as a precise countdown")
 	}
-	if want := "EP · " + month.Format("Jan 2006"); got.Items[0].Summary != want {
+	if want := "EP · " + fr.MonthYear(month); got.Items[0].Summary != want {
 		t.Errorf("Summary = %q, want %q", got.Items[0].Summary, want)
 	}
 }
@@ -158,7 +159,7 @@ func TestFetchEmptyCacheIsNotAnError(t *testing.T) {
 }
 
 func TestSummarizeFutureYear(t *testing.T) {
-	if got := summarize(entry("x", "album", "2031")); got != "Album · 2031, date TBA" {
+	if got := summarize(entry("x", "album", "2031")); got != "Album · 2031, date à venir" {
 		t.Errorf("summarize = %q", got)
 	}
 }

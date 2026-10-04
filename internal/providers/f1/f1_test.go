@@ -79,12 +79,12 @@ func TestSchedule(t *testing.T) {
 	}
 	// Singapore started an hour ago, so it's still "upcoming"; then the rest
 	// of the season soonest first; then past races, most recent first
-	if want := "Round 18,Round 19,Round 20,Round 17"; strings.Join(got, ",") != want {
+	if want := "Manche 18,Manche 19,Manche 20,Manche 17"; strings.Join(got, ",") != want {
 		t.Errorf("order = %v, want %s", got, want)
 	}
 	usa := pl.Items[1].Summary
 	// sessions in running order: the sprint (17:00Z) comes before qualifying (21:00Z)
-	sp, q, r := strings.Index(usa, "Sprint "), strings.Index(usa, "Qualifying "), strings.Index(usa, "Race ")
+	sp, q, r := strings.Index(usa, "Sprint "), strings.Index(usa, "Qualifs "), strings.Index(usa, "Course ")
 	if !strings.HasPrefix(usa, "Austin, USA · ") || sp < 0 || !(sp < q && q < r) {
 		t.Errorf("USA summary = %q", usa)
 	}
@@ -114,7 +114,7 @@ func TestDriverStandings(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := pl.Standings.Groups[0]
-	if g.Name != "After round 16" || len(g.Rows) != 2 {
+	if g.Name != "Après la manche 16" || len(g.Rows) != 2 {
 		t.Fatalf("group = %+v", g)
 	}
 	r := g.Rows[1]

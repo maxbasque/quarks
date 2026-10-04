@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/maxbasque/quarks/internal/fr"
 	"github.com/maxbasque/quarks/internal/musicbrainz"
 	"github.com/maxbasque/quarks/internal/spotifyapi"
 )
@@ -233,7 +234,7 @@ func (s *shared) ensureArtists(ctx context.Context) error {
 		return nil
 	}
 	if now := wallNow(); now.Before(s.blockedUntil) {
-		return fmt.Errorf("rate-limited by Spotify until %s", s.blockedUntil.Local().Format("Mon Jan 2 15:04"))
+		return fmt.Errorf("Spotify limite les requêtes jusqu'à %s", fr.DateTime(s.blockedUntil.Local()))
 	}
 
 	tok, err := s.accessToken(ctx)

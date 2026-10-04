@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,8 +25,8 @@
     {{ end }}
     <div class="topbar__right">
       <span class="tick" id="lastsync" hidden></span>
-      <button class="iconbtn" id="refresh-all" type="button" title="Refresh everything" aria-label="Refresh everything">↻</button>
-      <a class="iconbtn" href="/settings" title="Settings" aria-label="Settings">⚙</a>
+      <button class="iconbtn" id="refresh-all" type="button" title="Tout actualiser" aria-label="Tout actualiser">↻</button>
+      <a class="iconbtn" href="/settings" title="Paramètres" aria-label="Paramètres">⚙</a>
     </div>
   </header>
 
@@ -77,7 +77,7 @@
 <div class="box__status">
   <span class="badge{{ if .Danger }} badge--danger{{ end }}"{{ if not .Badge }} hidden{{ end }}>{{ .Badge }}</span>
   <span class="fresh">{{ .Fresh }}</span>
-  <button class="box__refresh" type="button" title="Refresh" aria-label="Refresh">↻</button>
+  <button class="box__refresh" type="button" title="Actualiser" aria-label="Actualiser">↻</button>
 </div>
 {{ end }}
 
@@ -116,7 +116,7 @@
       <span class="weather__temp">{{ temp .Current }}</span>
       <span class="weather__desc">
         {{ .Condition }}
-        <span class="weather__sub">feels {{ temp .FeelsLike }} · today {{ temp .Today.Low }} / {{ temp .Today.High }}</span>
+        <span class="weather__sub">ressenti {{ temp .FeelsLike }} · aujourd’hui {{ temp .Today.Low }} / {{ temp .Today.High }}</span>
       </span>
     </div>
     {{ if .Forecast }}
@@ -145,13 +145,13 @@
           {{ if .Author }}<span>{{ .Author }}</span>{{ end }}
           {{ if not .PublishedAt.IsZero }}<time datetime="{{ .PublishedAt.Format "2006-01-02T15:04:05Z07:00" }}">{{ ago .PublishedAt }}</time>{{ end }}
           {{ if gt .Score 0 }}<span>▲ {{ .Score }}</span>{{ end }}
-          {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} comments</a>{{ end }}
-          {{ if not .Hero }}<a class="item__read" href="/reader?url={{ .URL }}">read here</a>{{ end }}
+          {{ if gt .Comments 0 }}<a class="item__comments" href="{{ if .CommentsURL }}{{ .CommentsURL }}{{ else }}{{ .URL }}{{ end }}" target="_blank" rel="noopener noreferrer">{{ .Comments }} commentaires</a>{{ end }}
+          {{ if not .Hero }}<a class="item__read" href="/reader?url={{ .URL }}">lire ici</a>{{ end }}
         </div>
       </div>
     </li>
     {{ else }}
-    <li class="item item--empty">Nothing here yet.</li>
+    <li class="item item--empty">Rien pour l’instant.</li>
     {{ end }}
   </ul>
   {{ end }}{{/* .Weather */}}

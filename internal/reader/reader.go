@@ -31,7 +31,7 @@ const (
 )
 
 // errNoContent means the page fetched fine but held no readable prose.
-var errNoContent = errors.New("no readable text on this page — try “open original”")
+var errNoContent = errors.New("aucun texte lisible sur cette page — essayez « ouvrir l’original »")
 
 // Article is the sanitized, readable form of a page.
 type Article struct {
@@ -76,7 +76,7 @@ func New() *Reader {
 func (r *Reader) Get(ctx context.Context, rawURL string) (Article, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return Article{}, fmt.Errorf("reader: unsupported URL %q", rawURL)
+		return Article{}, fmt.Errorf("adresse non prise en charge : %q", rawURL)
 	}
 
 	if art, ok := r.fromCache(rawURL); ok {
@@ -96,21 +96,21 @@ func (r *Reader) Get(ctx context.Context, rawURL string) (Article, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return Article{}, fmt.Errorf("reader: %s returned %d", rawURL, resp.StatusCode)
+		return Article{}, fmt.Errorf("%s a répondu %d", rawURL, resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" && !strings.Contains(ct, "html") {
-		return Article{}, fmt.Errorf("reader: %s is not an HTML page (%s)", rawURL, ct)
+		return Article{}, fmt.Errorf("%s n’est pas une page web (%s)", rawURL, ct)
 	}
 
 	parsed, err := readability.FromReader(io.LimitReader(resp.Body, maxBodySize), u)
 	if err != nil {
-		return Article{}, fmt.Errorf("reader: could not extract %s: %w", rawURL, err)
+		return Article{}, fmt.Errorf("extraction impossible de %s : %w", rawURL, err)
 	}
 
 	sanitized := strings.TrimSpace(r.policy.Sanitize(parsed.Content))
 	// Pages with no real prose — audio/video players, paywalls, link hubs —
 	// come back with a title but little or no body. Don't render a blank panel;
-	// tell the caller so the UI can point at "open original" instead.
+	// tell the caller so the UI can point at "ouvrir l’original" instead.
 	if parsed.Length < minReadableChars || sanitized == "" {
 		return Article{}, errNoContent
 	}
