@@ -41,10 +41,18 @@ feed via a secret URL), `hackernews`, `youtube` (channels + playlists), `reddit`
 — see `secrets.example.yaml` and `config.example.yaml`.
 
 **Settings:** the gear icon in the header opens `/settings`, an in-app page for
-credential-backed integrations that need more than hand-editing YAML — right
-now that's connecting a Spotify account (OAuth happens in-window; it writes
-`secrets.yaml` for you and shows you the `config.yaml` block to paste in for
-the Media tab).
+things that shouldn't need hand-editing YAML: switching a page's named columns
+on and off (saved to `layout.yaml` beside the config — `config.yaml` is never
+rewritten), adding secrets such as `reddit_home`, and connecting a Spotify
+account (OAuth happens in-window; it writes `secrets.yaml` for you and shows
+you the `config.yaml` block to paste in for a Media tab).
+
+**Columns:** a page's `columns:` is either a count (widgets place themselves
+with `column: N`) or a list of named columns, each with its own `widgets:`,
+an optional `weight` and `enabled: false` to start hidden; `max_columns`
+(default 3) caps how many show at once. The shipped `config.example.yaml`
+needs no secrets: Accueil starts with Nouvelles + Aujourd'hui, and Niches
+(which includes your Reddit front page) is off until you add `reddit_home`.
 
 **Keyboard:** `j` / `k` move between items, `Enter` opens the article inline
 (extracted reader view), `o` opens the original, `Esc` closes reader panels.

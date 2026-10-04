@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func testServer(t *testing.T, spotifyFixture *httptest.Server) *Server {
 		sp.AuthBase = spotifyFixture.URL
 		sp.APIBase = spotifyFixture.URL
 	}
-	s, err := NewServer(store, func(string) bool { return true }, filepath.Join(dir, "secrets.yaml"), func() error { return nil }, sp)
+	s, err := NewServer(store, func(string) bool { return true }, filepath.Join(dir, "secrets.yaml"), filepath.Join(dir, "layout.yaml"), func() error { return nil }, sp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,5 +316,60 @@ func TestSecretsDeleteOfReservedKeyIsNoop(t *testing.T) {
 	}
 	if secrets["spotify_client_id"] != "keep-me" {
 		t.Error("the generic secrets delete should not remove a reserved key")
+	}
+}
+
+func layoutServer(t *testing.T) *Server {
+	t.Helper()
+	s := testServer(t, nil)
+	s.Publish(Meta{Pages: []Page{{
+		Name: "Accueil", MaxColumns: 2,
+		Choices: []config.ColumnChoice{
+			{Name: "Niches", MissingSecrets: []string{"reddit_home"}},
+			{Name: "Nouvelles", Enabled: true},
+			{Name: "Aujourd'hui", Enabled: true},
+		},
+	}}})
+	return s
+}
+
+func TestSettingsLayoutSection(t *testing.T) {
+	s := layoutServer(t)
+	body := get(t, s, "/settings").Body.String()
+	for _, want := range []string{`id="layout"`, `value="Niches"`, `<code>reddit_home</code>`, `data-max="2"`, "Accueil: 2 of 2"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("settings page missing %q", want)
+		}
+	}
+}
+
+func TestLayoutSet(t *testing.T) {
+	s := layoutServer(t)
+
+	// form order doesn't matter; the saved order is the config's
+	w := postForm(t, s, "/settings/layout", url.Values{"page": {"Accueil"}, "column": {"Aujourd'hui", "Niches"}})
+	if loc := w.Header().Get("Location"); w.Code != http.StatusSeeOther || loc != "/settings#layout" {
+		t.Fatalf("status = %d, Location = %q", w.Code, loc)
+	}
+	data, err := os.ReadFile(s.layoutPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); !strings.Contains(got, "- Niches\n    - Aujourd'hui") {
+		t.Errorf("layout.yaml = %q", got)
+	}
+
+	for _, tc := range []struct {
+		form url.Values
+		code string
+	}{
+		{url.Values{"page": {"Accueil"}}, "none"},
+		{url.Values{"page": {"Accueil"}, "column": {"Niches", "Nouvelles", "Aujourd'hui"}}, "too_many"},
+		{url.Values{"page": {"Sports"}, "column": {"Niches"}}, "unknown"},
+	} {
+		w := postForm(t, s, "/settings/layout", tc.form)
+		if loc := w.Header().Get("Location"); loc != "/settings?lerr="+tc.code+"#layout" {
+			t.Errorf("%v: Location = %q", tc.form, loc)
+		}
 	}
 }

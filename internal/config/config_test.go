@@ -144,3 +144,140 @@ widgets:
 		t.Errorf("unresolved token should be empty, got %q", s.Source)
 	}
 }
+
+const namedColumnsConfig = `
+pages:
+  - name: Accueil
+    max_columns: 2
+    columns:
+      - name: Niches
+        enabled: false
+        weight: 27
+        widgets:
+          - { type: rss, title: Reddit, feeds: [ "${secret:reddit_home}" ] }
+      - name: Nouvelles
+        weight: 46
+        widgets:
+          - { type: rss, title: RC, feeds: [https://rc.example/rss] }
+      - name: Aujourd'hui
+        weight: 27
+        widgets:
+          - { type: weather, title: Météo }
+          - { type: potd, title: Photo }
+`
+
+func TestLoadNamedColumns(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, namedColumnsConfig, 0o644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	pg := cfg.Pages[0]
+	if pg.Columns != 2 || pg.MaxColumns != 2 {
+		t.Errorf("columns = %d, max = %d", pg.Columns, pg.MaxColumns)
+	}
+	if len(pg.ColumnWeights) != 2 || pg.ColumnWeights[0] != 46 || pg.ColumnWeights[1] != 27 {
+		t.Errorf("weights = %v", pg.ColumnWeights)
+	}
+	if len(pg.Boxes) != 3 {
+		t.Fatalf("boxes = %d, want 3 (disabled column's widgets dropped)", len(pg.Boxes))
+	}
+	if pg.Boxes[0].Column != 1 || pg.Boxes[1].Column != 2 || pg.Boxes[2].Column != 2 {
+		t.Errorf("box columns = %d %d %d", pg.Boxes[0].Column, pg.Boxes[1].Column, pg.Boxes[2].Column)
+	}
+	if pg.Boxes[2].Widgets[0].Column != 2 {
+		t.Errorf("widget column = %d", pg.Boxes[2].Widgets[0].Column)
+	}
+
+	want := []ColumnChoice{
+		{Name: "Niches", MissingSecrets: []string{"reddit_home"}},
+		{Name: "Nouvelles", Enabled: true},
+		{Name: "Aujourd'hui", Enabled: true},
+	}
+	if len(pg.Choices) != len(want) {
+		t.Fatalf("choices = %+v", pg.Choices)
+	}
+	for i, c := range pg.Choices {
+		if c.Name != want[i].Name || c.Enabled != want[i].Enabled || len(c.MissingSecrets) != len(want[i].MissingSecrets) {
+			t.Errorf("choice %d = %+v, want %+v", i, c, want[i])
+		}
+	}
+}
+
+func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, namedColumnsConfig, 0o644)
+	writeFile(t, filepath.Join(dir, "secrets.yaml"), "reddit_home: https://reddit.example/.rss\n", 0o600)
+	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Niches", "Nouvelles"}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	pg := cfg.Pages[0]
+	if pg.Columns != 2 || len(pg.Boxes) != 2 {
+		t.Fatalf("columns = %d, boxes = %d", pg.Columns, len(pg.Boxes))
+	}
+	if got := feeds(t, cfg, 0); got[0] != "https://reddit.example/.rss" {
+		t.Errorf("first column feeds = %v", got)
+	}
+	if !pg.Choices[0].Enabled || pg.Choices[2].Enabled || len(pg.Choices[0].MissingSecrets) != 0 {
+		t.Errorf("choices = %+v", pg.Choices)
+	}
+
+	// over max_columns: the first two (config order) win
+	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Aujourd'hui", "Niches", "Nouvelles"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c := cfg.Pages[0].Choices; !c[0].Enabled || !c[1].Enabled || c[2].Enabled {
+		t.Errorf("capped choices = %+v", c)
+	}
+
+	// a saved choice naming no current column falls back to the config's flags
+	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Gone"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c := cfg.Pages[0].Choices; c[0].Enabled || !c[1].Enabled || !c[2].Enabled {
+		t.Errorf("fallback choices = %+v", c)
+	}
+}
+
+func TestLoadExampleConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	data, err := os.ReadFile("../../config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, cfgPath, string(data), 0o644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// the shipped default must work with no secrets.yaml at all
+	for _, pg := range cfg.Pages {
+		for _, c := range pg.Choices {
+			if c.Enabled && len(c.MissingSecrets) > 0 {
+				t.Errorf("page %q column %q is on by default but needs %v", pg.Name, c.Name, c.MissingSecrets)
+			}
+		}
+	}
+	if pg := cfg.Pages[0]; pg.Columns != 2 || pg.Choices[1].Name != "Nouvelles" || !pg.Choices[1].Enabled {
+		t.Errorf("default Accueil = %d columns, choices %+v", pg.Columns, pg.Choices)
+	}
+}

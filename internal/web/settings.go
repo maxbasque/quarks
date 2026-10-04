@@ -94,19 +94,101 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 		secrets.Error = secretsErrors[code]
 	}
 
-	vm := settingsVM{
-		Sections: []sectionVM{
-			{ID: "spotify", Label: "Spotify", Status: sp.StatusLine()},
-			{ID: "secrets", Label: "Secrets", Status: secrets.StatusLine()},
-		},
-		Spotify: sp,
-		Secrets: secrets,
+	vm := settingsVM{Spotify: sp, Secrets: secrets}
+	layout := s.layoutVM()
+	if len(layout.Pages) > 0 {
+		if code := r.URL.Query().Get("lerr"); code != "" {
+			layout.Error = layoutErrors[code]
+		}
+		vm.Layout = layout
+		vm.Sections = append(vm.Sections, sectionVM{ID: "layout", Label: "Columns", Status: layout.StatusLine()})
 	}
+	vm.Sections = append(vm.Sections,
+		sectionVM{ID: "spotify", Label: "Spotify", Status: sp.StatusLine()},
+		sectionVM{ID: "secrets", Label: "Secrets", Status: secrets.StatusLine()},
+	)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "settings.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// layoutVM lists every page that declares named columns, for the checkboxes.
+func (s *Server) layoutVM() layoutSettingsVM {
+	var vm layoutSettingsVM
+	for _, pg := range s.meta.Load().Pages {
+		if len(pg.Choices) == 0 {
+			continue
+		}
+		pv := layoutPageVM{Name: pg.Name, Max: pg.MaxColumns}
+		for _, c := range pg.Choices {
+			pv.Columns = append(pv.Columns, layoutColumnVM{Name: c.Name, Enabled: c.Enabled, MissingSecrets: c.MissingSecrets})
+			if c.Enabled {
+				pv.Shown++
+			}
+		}
+		vm.Pages = append(vm.Pages, pv)
+	}
+	return vm
+}
+
+var layoutErrors = map[string]string{
+	"none":     "Keep at least one column.",
+	"too_many": "That's more columns than this page allows.",
+	"unknown":  "That page has no columns to choose from — the config may have changed; reload this page.",
+}
+
+// handleLayoutSet saves which named columns a page shows. The choice goes to
+// layout.yaml, never config.yaml.
+func (s *Server) handleLayoutSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.FormValue("page")
+
+	var page *Page
+	for i, pg := range s.meta.Load().Pages {
+		if pg.Name == name && len(pg.Choices) > 0 {
+			page = &s.meta.Load().Pages[i]
+			break
+		}
+	}
+	if page == nil {
+		http.Redirect(w, r, "/settings?lerr=unknown#layout", http.StatusSeeOther)
+		return
+	}
+
+	want := map[string]bool{}
+	for _, c := range r.Form["column"] {
+		want[c] = true
+	}
+	var cols []string // config order, not form order
+	for _, c := range page.Choices {
+		if want[c.Name] {
+			cols = append(cols, c.Name)
+		}
+	}
+	switch {
+	case len(cols) == 0:
+		http.Redirect(w, r, "/settings?lerr=none#layout", http.StatusSeeOther)
+		return
+	case len(cols) > page.MaxColumns:
+		http.Redirect(w, r, "/settings?lerr=too_many#layout", http.StatusSeeOther)
+		return
+	}
+
+	if err := config.SetPageColumns(s.layoutPath, name, cols); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = s.reloadNow()
+	http.Redirect(w, r, "/settings#layout", http.StatusSeeOther)
 }
 
 // otherSecretsVM lists every secrets.yaml key not already owned by a
@@ -343,8 +425,35 @@ func randomState() (string, error) {
 // column — each sectionVM.ID matches a <section id="..."> the nav links to.
 type settingsVM struct {
 	Sections []sectionVM
+	Layout   layoutSettingsVM
 	Spotify  spotifySettingsVM
 	Secrets  secretsSettingsVM
+}
+
+type layoutSettingsVM struct {
+	Pages []layoutPageVM
+	Error string
+}
+
+type layoutPageVM struct {
+	Name    string
+	Max     int
+	Shown   int
+	Columns []layoutColumnVM
+}
+
+type layoutColumnVM struct {
+	Name           string
+	Enabled        bool
+	MissingSecrets []string
+}
+
+func (lv layoutSettingsVM) StatusLine() string {
+	if len(lv.Pages) == 1 {
+		p := lv.Pages[0]
+		return fmt.Sprintf("%s: %d of %d", p.Name, p.Shown, p.Max)
+	}
+	return fmt.Sprintf("%d pages", len(lv.Pages))
 }
 
 type sectionVM struct {

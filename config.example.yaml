@@ -1,79 +1,91 @@
 # The dashboard can have several top-level pages — tabs in the title bar.
-# For a single page, drop `pages:` and put `widgets:` at the top level, with
-# optional `columns` / `column_weights` under `window:`.
+#
+# A page's `columns:` is either a list of named columns (below) or a plain
+# count, with each widget placing itself via `column: N`. Named columns can be
+# switched on and off from Settings (the gear icon in the header); those
+# choices are saved to layout.yaml beside this file and win over `enabled:`.
+# `max_columns` (default 3) caps how many show at once; `weight` sets
+# relative widths.
+#
+# Nothing enabled here needs a secret. Niches' Reddit tab reads your
+# personalized front page, a private RSS URL from reddit.com/prefs/feeds/ —
+# add it as `reddit_home` under Settings → Secrets before turning Niches on.
+window:
+  theme: dark
+
 pages:
-  - name: Home
-    columns: 3
-    column_weights: [27, 46, 27]  # relative widths; values summing to 100 read as %
+  - name: Accueil
+    max_columns: 3
+    columns:
+      - name: Niches
+        enabled: false
+        weight: 27
+        widgets:
+          - type: group
+            title: Niches
+            tabs:
+              - { title: Reddit, type: rss, ttl: 20m, limit: 30, feeds: [ "${secret:reddit_home}" ] }
+              - { title: HN, type: hackernews, ttl: 15m, limit: 25 }
+              - { title: VGC, type: rss, ttl: 30m, limit: 20, source: VGC,
+                  feeds: [https://www.videogameschronicle.com/category/news/feed/] }
 
-    widgets:
-      # a plain widget: one feed, one card
-      - type: hackernews
-        column: 1
-        title: Hacker News
-        ttl: 15m
-        limit: 25
+      - name: Nouvelles
+        weight: 46
+        widgets:
+          - type: group
+            title: Nouvelles
+            tabs:
+              - { title: À la une, type: rss, ttl: 15m, limit: 25, feeds: [https://ici.radio-canada.ca/info/rss/info/a-la-une] }
+              - { title: En continu, type: rss, ttl: 10m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu] }
+              - { title: Montréal, type: rss, ttl: 15m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/grandmontreal/en-continu] }
+              - { title: Noovo, type: rss, ttl: 20m, limit: 25, source: Noovo Info, feeds: [https://www.noovo.info/arc/outboundfeeds/rss/] }
+              # RC section feeds: …/info/rss/<section>/en-continu
+              #   (politique, international, economie, sante, grandmontreal, sports, …)
 
-      # a tab group: several feeds sharing one card
-      - type: group
-        column: 1
-        title: Radio-Canada
-        tabs:
-          - { title: À la une, type: rss, ttl: 15m, feeds: [https://ici.radio-canada.ca/info/rss/info/a-la-une] }
-          - { title: En continu, type: rss, ttl: 10m, feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu] }
-          # RC section feeds: …/info/rss/<section>/en-continu
-          #   (politique, international, economie, sante, grandmontreal, sports, …)
+      - name: Aujourd'hui
+        weight: 27
+        widgets:
+          - type: weather
+            title: Montréal
+            ttl: 30m
+            latitude: 45.50
+            longitude: -73.57
+            forecast_days: 4
 
-      # personalized Reddit home feed — a secret RSS URL from reddit.com/prefs/feeds/,
-      # kept in secrets.yaml (see secrets.example.yaml)
-      - type: rss
-        column: 2
-        title: Reddit
-        ttl: 20m
-        feeds: [ "${secret:reddit_home}" ]
+          # Wikimedia Commons "Picture of the Day". lang sets the caption language.
+          - type: potd
+            title: Photo du jour
+            ttl: 6h
+            lang: fr
 
-      - type: youtube
-        column: 2
-        title: YouTube
-        ttl: 30m
-        channels: [ UCHnyfMqiRRG1u-2MsSQLbXA ]   # channel IDs (UC…); playlists: [PL…] also works
+          # Wikipedia "On this day". mode: selected | events | births | deaths
+          # | holidays | all
+          - type: onthisday
+            title: Éphéméride
+            ttl: 12h
+            limit: 15
+            lang: fr
+            mode: selected
 
-      - type: weather
-        column: 3
-        title: Montréal
-        ttl: 30m
-        latitude: 45.50
-        longitude: -73.57
-        forecast_days: 4
+      - name: Hockey
+        enabled: false
+        weight: 27
+        widgets:
+          - type: nhl
+            title: Canadiens
+            team: MTL
+            ttl: 1h
+            limit: 12
 
-      - type: rss
-        column: 3
-        title: Noovo Info
-        ttl: 20m
-        feeds: [https://www.noovo.info/arc/outboundfeeds/rss/]
-        # summary: false        # rss items show a 2-line excerpt by default
-
-      # Wikipedia "On this day" for today's date. Keyless. lang: en | fr | de |
-      # sv | pt | ru | es …  mode: selected (curated) | events | births | deaths
-      # | holidays | all
-      - type: onthisday
-        column: 3
-        title: Éphéméride
-        ttl: 12h
-        lang: fr
-        mode: selected
-
-      # Wikimedia Commons "Picture of the Day": one full-width image + caption.
-      # Keyless. lang sets the caption language (falls back to English).
-      - type: potd
-        column: 3
-        title: Photo du jour
-        ttl: 6h
-        lang: fr
+          - type: nhl
+            title: Autour de la ligue
+            mode: scores
+            ttl: 20m
+            limit: 20
 
   - name: Sports
-    columns: 2
-    column_weights: [1, 1]
+    columns: 3
+    column_weights: [27, 46, 27]   # relative widths; sum to 100 = percentages
     widgets:
       - type: nhl
         column: 1
@@ -84,33 +96,28 @@ pages:
 
       - type: group
         column: 2
-        title: Standings
+        title: Nouvelles
+        tabs:
+          - { title: Sports, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sports/en-continu] }
+          - { title: Hockey, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sous-theme/hockey] }
+          - { title: r/hockey, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/hockey/.rss] }
+          - { title: r/Habs, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/Habs/.rss] }
+
+      - type: group
+        column: 3
+        title: Classements
         tabs:
           - { title: NHL, type: standings, league: nhl, group: division, team: MTL, ttl: 2h }
           - { title: MLB, type: standings, league: mlb, ttl: 2h }
           # nhl group: division | conference | league
 
       - type: nhl
-        column: 2
-        title: Around the league
+        column: 3
+        title: Autour de la ligue
         mode: scores          # recent final scores, all teams
         ttl: 20m
+        limit: 20
 
-  # Upcoming albums and EPs from your followed Spotify artists (singles,
-  # compilations and remixes are filtered out).
-  # Spotify only supplies who you follow; the release dates come from
-  # MusicBrainz, which lists records before they're out. Connect Spotify
-  # from the in-app Settings page (the gear icon in the header) — it writes
-  # spotify_client_id / spotify_client_secret / spotify_refresh_token to
-  # secrets.yaml for you and shows you this exact block to paste in.
-  - name: Media
-    columns: 1
-    widgets:
-      - type: spotify
-        title: Upcoming releases
-        column: 1
-        ttl: 15m
-        # include: all (default) | album | eps
-        client_id: "${secret:spotify_client_id}"
-        client_secret: "${secret:spotify_client_secret}"
-        refresh_token: "${secret:spotify_refresh_token}"
+  # A Media page (upcoming albums from your followed Spotify artists) isn't
+  # included by default: connect Spotify from Settings, which then shows the
+  # block to paste here.

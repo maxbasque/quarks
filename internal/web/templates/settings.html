@@ -24,6 +24,31 @@
     <main class="settings__main">
       <h1 class="settings__title">Settings</h1>
 
+      {{ if .Layout.Pages }}
+      <section id="layout" class="settings__card">
+        <h2 class="settings__card-title">Columns</h2>
+        <p class="settings__status">Pick which columns each page shows.</p>
+        {{ if .Layout.Error }}<p class="settings__status settings__status--err">{{ .Layout.Error }}</p>{{ end }}
+
+        {{ range .Layout.Pages }}
+        <form method="post" action="/settings/layout" class="settings__layout" data-max="{{ .Max }}">
+          <input type="hidden" name="page" value="{{ .Name }}">
+          <p class="settings__layout-page">{{ .Name }} <span class="settings__layout-max">— up to {{ .Max }}</span></p>
+          {{ range .Columns }}
+          <label class="settings__check">
+            <input type="checkbox" name="column" value="{{ .Name }}"{{ if .Enabled }} checked{{ end }}>
+            <span>{{ .Name }}</span>
+            {{ if .MissingSecrets }}
+            <span class="settings__check-note">needs {{ range $i, $k := .MissingSecrets }}{{ if $i }}, {{ end }}<code>{{ $k }}</code>{{ end }} — add it under <a href="#secrets">Secrets</a></span>
+            {{ end }}
+          </label>
+          {{ end }}
+          <noscript><button class="settings__btn" type="submit">Save</button></noscript>
+        </form>
+        {{ end }}
+      </section>
+      {{ end }}
+
       <section id="spotify" class="settings__card">
         <h2 class="settings__card-title">Spotify — upcoming releases</h2>
         <p class="settings__status{{ if .Spotify.Connected }} settings__status--ok{{ end }}">{{ .Spotify.StatusLine }}</p>
@@ -106,5 +131,28 @@
       </section>
     </main>
   </div>
+  <script>
+    // Gray out the unchecked boxes once a page is at its column limit, keep
+    // the last checked box from being unchecked, and save on every change.
+    document.querySelectorAll('.settings__layout').forEach(function (form) {
+      var max = +form.dataset.max;
+      var boxes = form.querySelectorAll('input[type=checkbox]');
+      function sync() {
+        var n = 0;
+        boxes.forEach(function (b) { if (b.checked) n++; });
+        boxes.forEach(function (b) {
+          b.disabled = b.checked ? n <= 1 : n >= max;
+          b.parentElement.classList.toggle('settings__check--off', b.disabled);
+        });
+      }
+      boxes.forEach(function (b) {
+        b.addEventListener('change', function () {
+          boxes.forEach(function (x) { x.disabled = false; }); // disabled boxes aren't submitted
+          form.submit();
+        });
+      });
+      sync();
+    });
+  </script>
 </body>
 </html>

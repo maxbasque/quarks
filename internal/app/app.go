@@ -74,7 +74,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 
-	srv, err := web.NewServer(store, a.Refresh, config.SecretsPath(cfgPath), a.reloadNow, spotifyapi.NewClient())
+	srv, err := web.NewServer(store, a.Refresh, config.SecretsPath(cfgPath), config.LayoutPath(cfgPath), a.reloadNow, spotifyapi.NewClient())
 	if err != nil {
 		return nil, err
 	}
@@ -145,16 +145,18 @@ func (a *App) watch(ctx context.Context) {
 	}
 }
 
-// watchStamp is the newest mtime across the config file and the secrets file
-// beside it. Zero if the config file is unreadable.
+// watchStamp is the newest mtime across the config file and the secrets and
+// layout files beside it. Zero if the config file is unreadable.
 func (a *App) watchStamp() time.Time {
 	fi, err := os.Stat(a.cfgPath)
 	if err != nil {
 		return time.Time{}
 	}
 	newest := fi.ModTime()
-	if si, err := os.Stat(config.SecretsPath(a.cfgPath)); err == nil && si.ModTime().After(newest) {
-		newest = si.ModTime()
+	for _, p := range []string{config.SecretsPath(a.cfgPath), config.LayoutPath(a.cfgPath)} {
+		if si, err := os.Stat(p); err == nil && si.ModTime().After(newest) {
+			newest = si.ModTime()
+		}
 	}
 	return newest
 }
@@ -173,7 +175,7 @@ func (a *App) setLastMod(t time.Time) {
 
 // reloadNow re-runs the config->registry->scheduler pipeline immediately,
 // outside the 2s file-watch poll — used after the settings page writes
-// secrets.yaml, so a connect/disconnect takes effect without waiting on the
+// secrets.yaml or layout.yaml, so a change takes effect without waiting on the
 // poll. It reuses Run's lifetime context, so the new scheduler generation is
 // still torn down on shutdown like every other reload.
 func (a *App) reloadNow() error {
@@ -230,6 +232,8 @@ func (a *App) reload(ctx context.Context) error {
 			Columns:       pg.Columns,
 			ColumnWeights: pg.ColumnWeights,
 			Boxes:         boxes,
+			Choices:       pg.Choices,
+			MaxColumns:    pg.MaxColumns,
 		})
 	}
 	a.store.Retain(keep)

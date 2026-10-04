@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
 	"github.com/maxbasque/quarks/internal/reader"
 	"github.com/maxbasque/quarks/internal/spotifyapi"
@@ -40,6 +41,9 @@ type Page struct {
 	Columns       int
 	ColumnWeights []float64
 	Boxes         []Box
+
+	Choices    []config.ColumnChoice // named columns Settings can toggle; nil if none
+	MaxColumns int
 }
 
 // Box is one card. Members are widget keys; more than one means a tabbed card.
@@ -56,6 +60,7 @@ type Server struct {
 	reader      *reader.Reader
 	refresh     func(key string) bool // fetch now, bypassing the schedule
 	secretsPath string                // for the settings page to read/write credentials
+	layoutPath  string                // for the settings page to save column choices
 	reloadNow   func() error          // re-run the app's config.Load -> registry -> scheduler pipeline
 	meta        atomic.Pointer[Meta]
 	metaGen     atomic.Uint64
@@ -77,7 +82,7 @@ type renderedIndex struct {
 	body              []byte
 }
 
-func NewServer(store *core.Store, refresh func(key string) bool, secretsPath string, reloadNow func() error, spotify *spotifyapi.Client) (*Server, error) {
+func NewServer(store *core.Store, refresh func(key string) bool, secretsPath, layoutPath string, reloadNow func() error, spotify *spotifyapi.Client) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"ago":   ago,
 		"temp":  temp,
@@ -89,7 +94,7 @@ func NewServer(store *core.Store, refresh func(key string) bool, secretsPath str
 	}
 	s := &Server{
 		store: store, reader: reader.New(), refresh: refresh,
-		secretsPath: secretsPath, reloadNow: reloadNow, spotify: spotify, tmpl: tmpl,
+		secretsPath: secretsPath, layoutPath: layoutPath, reloadNow: reloadNow, spotify: spotify, tmpl: tmpl,
 	}
 	s.meta.Store(&Meta{Theme: "dark"})
 	return s, nil
@@ -114,6 +119,7 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/settings/spotify/authorize", s.handleSpotifyAuthorize)
 	mux.HandleFunc("/settings/spotify/callback", s.handleSpotifyCallback)
 	mux.HandleFunc("/settings/spotify/disconnect", s.handleSpotifyDisconnect)
+	mux.HandleFunc("/settings/layout", s.handleLayoutSet)
 	mux.HandleFunc("/settings/secrets/set", s.handleSecretsSet)
 	mux.HandleFunc("/settings/secrets/delete", s.handleSecretsDelete)
 	mux.HandleFunc("/", s.handleIndex)

@@ -23,6 +23,21 @@ type Page struct {
 	Columns       int
 	ColumnWeights []float64
 	Boxes         []Box
+
+	// Choices is set when the page declares named columns: every column the
+	// config offers, shown or not, in config order. Settings toggles them.
+	// Boxes / Columns / ColumnWeights above hold only the enabled ones.
+	Choices    []ColumnChoice
+	MaxColumns int
+}
+
+// ColumnChoice is one named, toggleable column of a page.
+type ColumnChoice struct {
+	Name    string
+	Enabled bool
+	// MissingSecrets lists ${secret:key} references in this column's widgets
+	// that secrets.yaml doesn't define — Settings flags them.
+	MissingSecrets []string
 }
 
 // Box is one card. It holds one widget, or several shown as tabs (`type: group`).
@@ -44,10 +59,20 @@ type fileShape struct {
 }
 
 type pageShape struct {
-	Name          string      `yaml:"name"`
-	Columns       int         `yaml:"columns"`
+	Name string `yaml:"name"`
+	// Columns is either a count (cards place themselves with `column: N`) or
+	// a list of named columns, each holding its own widgets (columnShape).
+	Columns       yaml.Node   `yaml:"columns"`
+	MaxColumns    int         `yaml:"max_columns"`
 	ColumnWeights []float64   `yaml:"column_weights"`
 	Widgets       []yaml.Node `yaml:"widgets"`
+}
+
+type columnShape struct {
+	Name    string      `yaml:"name"`
+	Enabled *bool       `yaml:"enabled"` // default true
+	Weight  float64     `yaml:"weight"`
+	Widgets []yaml.Node `yaml:"widgets"`
 }
 
 type groupShape struct {
@@ -68,6 +93,17 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	layout, err := loadLayout(LayoutPath(path))
+	if err != nil {
+		return nil, err
+	}
+
+	// the raw (unexpanded) tree is only for spotting unresolved secrets per
+	// named column; everything else reads the expanded one
+	var raw fileShape
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
 	data = expandTokens(data, secrets)
 
 	var fs fileShape
@@ -84,17 +120,31 @@ func Load(path string) (*Config, error) {
 	if len(shapes) == 0 {
 		// legacy: top-level widgets → one unnamed page
 		shapes = []pageShape{{
-			Columns:       fs.Window.Columns,
 			ColumnWeights: fs.Window.ColumnWeights,
 			Widgets:       fs.Widgets,
 		}}
+		if fs.Window.Columns != 0 {
+			shapes[0].Columns.Encode(fs.Window.Columns)
+		}
 	}
 
 	for i, ps := range shapes {
-		page := Page{
-			Name:          ps.Name,
-			Columns:       ps.Columns,
-			ColumnWeights: ps.ColumnWeights,
+		page := Page{Name: ps.Name, ColumnWeights: ps.ColumnWeights}
+
+		switch ps.Columns.Kind {
+		case yaml.SequenceNode:
+			var rawCols []columnShape
+			if i < len(raw.Pages) {
+				_ = raw.Pages[i].Columns.Decode(&rawCols)
+			}
+			if err := loadNamedColumns(&page, ps, rawCols, layout[ps.Name], secrets); err != nil {
+				return nil, fmt.Errorf("page %q: %w", ps.Name, err)
+			}
+		case 0:
+		default:
+			if err := ps.Columns.Decode(&page.Columns); err != nil {
+				return nil, fmt.Errorf("page %q: columns: %w", ps.Name, err)
+			}
 		}
 		if page.Columns == 0 {
 			page.Columns = 3
@@ -113,6 +163,87 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadNamedColumns fills page from a `columns:` list. enabled, when non-nil,
+// is the Settings page's saved choice for this page and overrides each
+// column's `enabled:` flag. Only enabled columns become boxes, so a hidden
+// column's widgets are never fetched.
+func loadNamedColumns(page *Page, ps pageShape, rawCols []columnShape, enabled []string, secrets map[string]string) error {
+	var cols []columnShape
+	if err := ps.Columns.Decode(&cols); err != nil {
+		return fmt.Errorf("columns: %w", err)
+	}
+	page.MaxColumns = ps.MaxColumns
+	if page.MaxColumns <= 0 {
+		page.MaxColumns = 3
+	}
+
+	on := make([]bool, len(cols))
+	seen := map[string]bool{}
+	for k, c := range cols {
+		if c.Name == "" {
+			return fmt.Errorf("column %d: missing name", k)
+		}
+		if seen[c.Name] {
+			return fmt.Errorf("column %q listed twice", c.Name)
+		}
+		seen[c.Name] = true
+		on[k] = c.Enabled == nil || *c.Enabled
+	}
+	if enabled != nil {
+		want := map[string]bool{}
+		for _, n := range enabled {
+			want[n] = true
+		}
+		override := make([]bool, len(cols))
+		matched := false
+		for k, c := range cols {
+			override[k] = want[c.Name]
+			matched = matched || override[k]
+		}
+		if matched { // a saved choice naming no current column falls back to the config's
+			on = override
+		}
+	}
+
+	shown := 0
+	for k, c := range cols {
+		if on[k] && shown >= page.MaxColumns {
+			on[k] = false
+		}
+		choice := ColumnChoice{Name: c.Name, Enabled: on[k]}
+		if k < len(rawCols) {
+			choice.MissingSecrets = missingSecrets(rawCols[k].Widgets, secrets)
+		}
+		page.Choices = append(page.Choices, choice)
+		if !on[k] {
+			continue
+		}
+		shown++
+		page.ColumnWeights = append(page.ColumnWeights, c.Weight)
+		for j, node := range c.Widgets {
+			box, err := parseBox(node)
+			if err != nil {
+				return fmt.Errorf("column %q, widget %d: %w", c.Name, j, err)
+			}
+			box.Column = shown
+			for w := range box.Widgets {
+				box.Widgets[w].Column = shown
+			}
+			page.Boxes = append(page.Boxes, box)
+		}
+	}
+	page.Columns = shown
+
+	// weights are optional; any unset one drops them all back to equal widths
+	for _, w := range page.ColumnWeights {
+		if w <= 0 {
+			page.ColumnWeights = nil
+			break
+		}
+	}
+	return nil
 }
 
 func parseBox(node yaml.Node) (Box, error) {
