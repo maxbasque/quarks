@@ -78,7 +78,17 @@ service (starts at login; `loginctl enable-linger $USER` to keep it running whil
 logged out), and a `.desktop` launcher with icons. Launch the window from your app
 menu ("Quark's") or `quarks-open`.
 
-**macOS** — binary + `quarks-open` to `~/.local/bin`, and a **launchd**
+**macOS, for everyone else** — download `Quarks-<version>.dmg` from the
+GitHub releases page and drag Quark's onto Applications (step-by-step French
+guide: [`packaging/macos/INSTALLER.md`](packaging/macos/INSTALLER.md)). It's a
+native app (`cmd/quarks-mac`): the server and a WebKit window in one process,
+so opening it starts everything and quitting or closing the window stops
+everything — no browser needed, nothing starts at login. It isn't signed with
+an Apple developer account, so macOS asks for *Open Anyway* once. Built on
+GitHub's macOS machines by `.github/workflows/macos-app.yml`: a `v*` tag
+publishes a release; a push to a `mac/...` branch builds a test `.dmg`.
+
+**macOS, from source** — binary + `quarks-open` to `~/.local/bin`, and a **launchd**
 LaunchAgent (`~/Library/LaunchAgents/com.maxbasque.quarks.plist`, logs to
 `~/Library/Logs/quarks.log`). Run `quarks-open` for the window. Needs Homebrew Go
 to build (`brew install go`) and a Chromium-family browser (Chrome / Chromium /

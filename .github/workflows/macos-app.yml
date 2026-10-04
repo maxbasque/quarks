@@ -1,0 +1,69 @@
+# Builds Quark's.app as a .dmg on a GitHub macOS machine.
+#
+# - Push a tag like v1.0.0: builds, smoke-tests, and publishes a GitHub release
+#   with the .dmg and the French install guide as its description.
+# - Push to a mac/... branch, or run it by hand (Actions › macOS app › Run
+#   workflow): builds and smoke-tests only; the .dmg is attached to the run as
+#   an artifact for testing.
+name: macOS app
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["mac/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test ./...
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build app and disk image
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else version="0.0.0-dev"; fi
+          ./packaging/macos/build-app.sh "$version"
+
+      - name: Smoke test — server, no window
+        run: |
+          QUARKS_HEADLESS=1 "dist/Quark's.app/Contents/MacOS/Quarks" &
+          pid=$!
+          for i in $(seq 50); do curl -fs -o /dev/null http://127.0.0.1:7373/ && break; sleep 0.2; done
+          curl -fsS http://127.0.0.1:7373/settings | grep -q "Paramètres"
+          test -f "$HOME/Library/Application Support/quarks/config.yaml"
+          kill "$pid"; wait "$pid" || true
+
+      - name: Smoke test — the real app, opened through Finder
+        run: |
+          open "dist/Quark's.app"
+          for i in $(seq 75); do curl -fs -o /dev/null http://127.0.0.1:7373/ && break; sleep 0.2; done
+          curl -fsS -o /dev/null http://127.0.0.1:7373/
+          sleep 5
+          pgrep -f "Quark's.app/Contents/MacOS/Quarks" >/dev/null   # the window didn't crash it
+          osascript -e 'quit app "Quark'"'"'s"' || pkill -f "Quark's.app/Contents/MacOS/Quarks"
+          sleep 2
+          ! pgrep -f "Quark's.app/Contents/MacOS/Quarks"           # quitting stops everything
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Quarks-dmg
+          path: dist/*.dmg
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg --title "Quark's ${GITHUB_REF_NAME#v}" --notes-file packaging/macos/INSTALLER.md

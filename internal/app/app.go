@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -99,6 +100,28 @@ func (a *App) Refresh(key string) bool {
 // Run loads the config, starts the HTTP server and the config watcher, and
 // blocks until ctx is cancelled.
 func (a *App) Run(ctx context.Context, addr string) error {
+	if err := a.start(ctx); err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	return a.serve(ctx, ln)
+}
+
+// Serve is Run on a listener the caller already opened — the macOS app
+// claims its port before it shows the window. It closes ln.
+func (a *App) Serve(ctx context.Context, ln net.Listener) error {
+	if err := a.start(ctx); err != nil {
+		ln.Close()
+		return err
+	}
+	return a.serve(ctx, ln)
+}
+
+// start loads the config and starts the scheduler and the config watcher.
+func (a *App) start(ctx context.Context) error {
 	a.mu.Lock()
 	a.runCtx = ctx
 	a.mu.Unlock()
@@ -108,8 +131,11 @@ func (a *App) Run(ctx context.Context, addr string) error {
 	}
 	a.setLastMod(a.watchStamp())
 	go a.watch(ctx)
+	return nil
+}
 
-	httpSrv := &http.Server{Addr: addr, Handler: a.srv.Routes()}
+func (a *App) serve(ctx context.Context, ln net.Listener) error {
+	httpSrv := &http.Server{Handler: a.srv.Routes()}
 	go func() {
 		<-ctx.Done()
 		shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -117,8 +143,8 @@ func (a *App) Run(ctx context.Context, addr string) error {
 		_ = httpSrv.Shutdown(shCtx)
 	}()
 
-	a.log.Info("quarks listening", "addr", "http://"+addr)
-	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	a.log.Info("quarks listening", "addr", "http://"+ln.Addr().String())
+	if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
