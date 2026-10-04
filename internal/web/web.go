@@ -33,7 +33,18 @@ var assets embed.FS
 type Meta struct {
 	Theme string
 	TTLs  map[string]time.Duration // widget key -> ttl, for the stale badge
-	Pages []Page
+	Pages []Page                   // shown pages only
+	// Layout is every named page, shown or not, with its column choices —
+	// what the Settings page offers to toggle.
+	Layout []LayoutPage
+}
+
+// LayoutPage is one page as Settings sees it.
+type LayoutPage struct {
+	Name       string
+	Enabled    bool
+	Columns    []config.ColumnChoice // nil unless the page declares named columns
+	MaxColumns int
 }
 
 // Page is one top-level tab: its column layout and cards.
@@ -42,9 +53,6 @@ type Page struct {
 	Columns       int
 	ColumnWeights []float64
 	Boxes         []Box
-
-	Choices    []config.ColumnChoice // named columns Settings can toggle; nil if none
-	MaxColumns int
 }
 
 // Box is one card. Members are widget keys; more than one means a tabbed card.

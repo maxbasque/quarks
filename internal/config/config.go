@@ -19,7 +19,11 @@ type Window struct {
 
 // Page is one top-level tab of the app: its own column layout and cards.
 type Page struct {
-	Name          string
+	Name string
+	// Enabled is false for a page switched off (`enabled: false`, or from
+	// Settings). It's still fully parsed so Settings can list it and its
+	// columns, but the app neither shows nor fetches it.
+	Enabled       bool
 	Columns       int
 	ColumnWeights []float64
 	Boxes         []Box
@@ -59,7 +63,8 @@ type fileShape struct {
 }
 
 type pageShape struct {
-	Name string `yaml:"name"`
+	Name    string `yaml:"name"`
+	Enabled *bool  `yaml:"enabled"` // default true
 	// Columns is either a count (cards place themselves with `column: N`) or
 	// a list of named columns, each holding its own widgets (columnShape).
 	Columns       yaml.Node   `yaml:"columns"`
@@ -128,8 +133,13 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
+	names := map[string]bool{}
 	for i, ps := range shapes {
-		page := Page{Name: ps.Name, ColumnWeights: ps.ColumnWeights}
+		if ps.Name != "" && names[ps.Name] {
+			return nil, fmt.Errorf("%s: page %q listed twice", path, ps.Name)
+		}
+		names[ps.Name] = true
+		page := Page{Name: ps.Name, Enabled: ps.Enabled == nil || *ps.Enabled, ColumnWeights: ps.ColumnWeights}
 
 		switch ps.Columns.Kind {
 		case yaml.SequenceNode:
@@ -137,7 +147,7 @@ func Load(path string) (*Config, error) {
 			if i < len(raw.Pages) {
 				_ = raw.Pages[i].Columns.Decode(&rawCols)
 			}
-			if err := loadNamedColumns(&page, ps, rawCols, layout[ps.Name], secrets); err != nil {
+			if err := loadNamedColumns(&page, ps, rawCols, layout.Columns[ps.Name], secrets); err != nil {
 				return nil, fmt.Errorf("page %q: %w", ps.Name, err)
 			}
 		case 0:
@@ -161,8 +171,36 @@ func Load(path string) (*Config, error) {
 		}
 		cfg.Pages = append(cfg.Pages, page)
 	}
+	applyPageChoice(cfg.Pages, layout.Pages)
 
 	return cfg, nil
+}
+
+// applyPageChoice overrides the pages' `enabled:` flags with the Settings
+// page's saved choice, when there is one naming at least one current page,
+// and makes sure at least one page stays shown.
+func applyPageChoice(pages []Page, shown []string) {
+	if shown != nil {
+		want := map[string]bool{}
+		for _, n := range shown {
+			want[n] = true
+		}
+		matched := false
+		for _, pg := range pages {
+			matched = matched || want[pg.Name]
+		}
+		if matched {
+			for i := range pages {
+				pages[i].Enabled = want[pages[i].Name]
+			}
+		}
+	}
+	for _, pg := range pages {
+		if pg.Enabled {
+			return
+		}
+	}
+	pages[0].Enabled = true
 }
 
 // loadNamedColumns fills page from a `columns:` list. enabled, when non-nil,

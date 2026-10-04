@@ -203,9 +203,18 @@ func (a *App) reload(ctx context.Context) error {
 	keep := map[string]bool{}
 	seen := map[string]bool{}
 	var pages []web.Page
+	var layout []web.LayoutPage
 	order := 0
 
 	for _, pg := range cfg.Pages {
+		if pg.Name != "" { // the legacy unnamed single page can't be toggled
+			layout = append(layout, web.LayoutPage{
+				Name: pg.Name, Enabled: pg.Enabled, Columns: pg.Choices, MaxColumns: pg.MaxColumns,
+			})
+		}
+		if !pg.Enabled {
+			continue // listed in Settings, but not shown or fetched
+		}
 		var boxes []web.Box
 		for bi, box := range pg.Boxes {
 			var members []string
@@ -232,8 +241,6 @@ func (a *App) reload(ctx context.Context) error {
 			Columns:       pg.Columns,
 			ColumnWeights: pg.ColumnWeights,
 			Boxes:         boxes,
-			Choices:       pg.Choices,
-			MaxColumns:    pg.MaxColumns,
 		})
 	}
 	a.store.Retain(keep)
@@ -260,10 +267,11 @@ func (a *App) reload(ctx context.Context) error {
 
 	a.srv.Publish(web.Meta{
 		Theme: cfg.Window.Theme,
-		TTLs:  ttls,
-		Pages: pages,
+		TTLs:   ttls,
+		Pages:  pages,
+		Layout: layout,
 	})
-	a.log.Info("config loaded", "pages", len(cfg.Pages), "widgets", len(keep))
+	a.log.Info("config loaded", "pages", len(pages), "widgets", len(keep))
 	return nil
 }
 

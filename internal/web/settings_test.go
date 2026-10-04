@@ -322,21 +322,28 @@ func TestSecretsDeleteOfReservedKeyIsNoop(t *testing.T) {
 func layoutServer(t *testing.T) *Server {
 	t.Helper()
 	s := testServer(t, nil)
-	s.Publish(Meta{Pages: []Page{{
-		Name: "Accueil", MaxColumns: 2,
-		Choices: []config.ColumnChoice{
+	s.Publish(Meta{Layout: []LayoutPage{
+		{Name: "Accueil", Enabled: true, MaxColumns: 2, Columns: []config.ColumnChoice{
 			{Name: "Niches", MissingSecrets: []string{"reddit_home"}},
 			{Name: "Nouvelles", Enabled: true},
 			{Name: "Aujourd'hui", Enabled: true},
-		},
-	}}})
+		}},
+		{Name: "Sports", MaxColumns: 3, Columns: []config.ColumnChoice{
+			{Name: "Canadiens", Enabled: true},
+			{Name: "Classements", Enabled: true},
+		}},
+		{Name: "Media", Enabled: true},
+	}})
 	return s
 }
 
 func TestSettingsLayoutSection(t *testing.T) {
 	s := layoutServer(t)
 	body := get(t, s, "/settings").Body.String()
-	for _, want := range []string{`id="layout"`, `value="Niches"`, `<code>reddit_home</code>`, `data-max="2"`, "Accueil: 2 of 2"} {
+	for _, want := range []string{
+		`id="layout"`, `name="page" value="Media"`, `name="cols.Accueil" value="Niches"`,
+		`name="cols.Sports" value="Canadiens"`, `<code>reddit_home</code>`, `data-max="2"`, "2 of 3 pages shown",
+	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings page missing %q", want)
 		}
@@ -347,7 +354,12 @@ func TestLayoutSet(t *testing.T) {
 	s := layoutServer(t)
 
 	// form order doesn't matter; the saved order is the config's
-	w := postForm(t, s, "/settings/layout", url.Values{"page": {"Accueil"}, "column": {"Aujourd'hui", "Niches"}})
+	w := postForm(t, s, "/settings/layout", url.Values{
+		"page":         {"Sports", "Accueil"},
+		"cols.Accueil": {"Aujourd'hui", "Niches"},
+		"cols.Sports":  {"Classements"},
+		"cols.Bogus":   {"x"},
+	})
 	if loc := w.Header().Get("Location"); w.Code != http.StatusSeeOther || loc != "/settings#layout" {
 		t.Fatalf("status = %d, Location = %q", w.Code, loc)
 	}
@@ -355,17 +367,29 @@ func TestLayoutSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(data); !strings.Contains(got, "- Niches\n    - Aujourd'hui") {
-		t.Errorf("layout.yaml = %q", got)
+	want := "pages:\n    - Accueil\n    - Sports\ncolumns:\n    Accueil:\n        - Niches\n        - Aujourd'hui\n    Sports:\n        - Classements\n"
+	if got := string(data); got != want {
+		t.Errorf("layout.yaml =\n%s\nwant\n%s", got, want)
 	}
 
+	ok := url.Values{"cols.Accueil": {"Nouvelles"}, "cols.Sports": {"Canadiens"}}
+	with := func(extra url.Values) url.Values {
+		v := url.Values{}
+		for k, vs := range ok {
+			v[k] = vs
+		}
+		for k, vs := range extra {
+			v[k] = vs
+		}
+		return v
+	}
 	for _, tc := range []struct {
 		form url.Values
 		code string
 	}{
-		{url.Values{"page": {"Accueil"}}, "none"},
-		{url.Values{"page": {"Accueil"}, "column": {"Niches", "Nouvelles", "Aujourd'hui"}}, "too_many"},
-		{url.Values{"page": {"Sports"}, "column": {"Niches"}}, "unknown"},
+		{with(url.Values{"page": {"Gone"}}), "no_pages"},
+		{with(url.Values{"page": {"Media"}, "cols.Sports": nil}), "no_columns"},
+		{with(url.Values{"page": {"Media"}, "cols.Accueil": {"Niches", "Nouvelles", "Aujourd'hui"}}), "too_many"},
 	} {
 		w := postForm(t, s, "/settings/layout", tc.form)
 		if loc := w.Header().Get("Location"); loc != "/settings?lerr="+tc.code+"#layout" {

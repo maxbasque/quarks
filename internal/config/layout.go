@@ -11,47 +11,62 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The layout file holds choices made from the Settings page — which named
-// columns each page shows — so the app never has to rewrite the hand-edited
-// config.yaml. It maps a page name to the names of its enabled columns:
+// The layout file holds choices made from the Settings page — which pages
+// and which named columns are shown — so the app never has to rewrite the
+// hand-edited config.yaml:
 //
-//	Accueil: [Nouvelles, Aujourd'hui]
+//	pages: [Accueil, Sports]
+//	columns:
+//	  Accueil: [Nouvelles, Aujourd'hui]
 //
-// A page missing from the file uses the `enabled:` flags in config.yaml.
+// Anything the file doesn't mention uses the `enabled:` flags in config.yaml.
+// An older form holding only the columns map at top level is still read.
+type Layout struct {
+	Pages   []string            `yaml:"pages"` // nil: not chosen yet
+	Columns map[string][]string `yaml:"columns"`
+}
 
 // LayoutPath is the layout file that sits beside the config file.
 func LayoutPath(configPath string) string {
 	return filepath.Join(filepath.Dir(configPath), "layout.yaml")
 }
 
-// loadLayout reads the layout file. A missing file is fine (empty map).
-func loadLayout(path string) (map[string][]string, error) {
+// loadLayout reads the layout file. A missing file is fine (empty layout).
+func loadLayout(path string) (Layout, error) {
+	l := Layout{Columns: map[string][]string{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return map[string][]string{}, nil
+		return l, nil
 	}
 	if err != nil {
-		return nil, err
+		return l, err
 	}
-	var m map[string][]string
-	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
+
+	var top map[string]yaml.Node
+	if err := yaml.Unmarshal(data, &top); err != nil {
+		return l, fmt.Errorf("parse %s: %w", path, err)
 	}
-	if m == nil {
-		m = map[string][]string{}
+	legacy := false
+	for k := range top {
+		legacy = legacy || (k != "pages" && k != "columns")
 	}
-	return m, nil
+	if legacy {
+		err = yaml.Unmarshal(data, &l.Columns)
+	} else {
+		err = yaml.Unmarshal(data, &l)
+	}
+	if err != nil {
+		return l, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if l.Columns == nil {
+		l.Columns = map[string][]string{}
+	}
+	return l, nil
 }
 
-// SetPageColumns records which named columns page shows, keeping every other
-// page's entry in the layout file as it was.
-func SetPageColumns(path, page string, columns []string) error {
-	m, err := loadLayout(path)
-	if err != nil {
-		return err
-	}
-	m[page] = columns
-	out, err := yaml.Marshal(m)
+// SaveLayout writes the layout file whole.
+func SaveLayout(path string, l Layout) error {
+	out, err := yaml.Marshal(l)
 	if err != nil {
 		return err
 	}

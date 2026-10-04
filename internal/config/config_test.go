@@ -212,7 +212,7 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeFile(t, cfgPath, namedColumnsConfig, 0o644)
 	writeFile(t, filepath.Join(dir, "secrets.yaml"), "reddit_home: https://reddit.example/.rss\n", 0o600)
-	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Niches", "Nouvelles"}); err != nil {
+	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Niches", "Nouvelles"}}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,7 +232,7 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 	}
 
 	// over max_columns: the first two (config order) win
-	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Aujourd'hui", "Niches", "Nouvelles"}); err != nil {
+	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Aujourd'hui", "Niches", "Nouvelles"}}}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = Load(cfgPath)
@@ -244,7 +244,7 @@ func TestLoadNamedColumnsLayoutOverride(t *testing.T) {
 	}
 
 	// a saved choice naming no current column falls back to the config's flags
-	if err := SetPageColumns(LayoutPath(cfgPath), "Accueil", []string{"Gone"}); err != nil {
+	if err := SaveLayout(LayoutPath(cfgPath), Layout{Columns: map[string][]string{"Accueil": []string{"Gone"}}}); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = Load(cfgPath)
@@ -279,5 +279,113 @@ func TestLoadExampleConfig(t *testing.T) {
 	}
 	if pg := cfg.Pages[0]; pg.Columns != 2 || pg.Choices[1].Name != "Nouvelles" || !pg.Choices[1].Enabled {
 		t.Errorf("default Accueil = %d columns, choices %+v", pg.Columns, pg.Choices)
+	}
+}
+
+const twoPagesConfig = `
+pages:
+  - name: Accueil
+    widgets:
+      - { type: rss, title: RC, feeds: [https://rc.example/rss] }
+  - name: Sports
+    enabled: false
+    columns:
+      - name: Canadiens
+        widgets:
+          - { type: nhl, title: Canadiens, team: MTL }
+      - name: Scores
+        widgets:
+          - { type: nhl, title: Scores, mode: scores }
+  - name: Media
+    widgets:
+      - { type: rss, title: M, feeds: [https://m.example/rss] }
+`
+
+func enabledPages(cfg *Config) []string {
+	var out []string
+	for _, pg := range cfg.Pages {
+		if pg.Enabled {
+			out = append(out, pg.Name)
+		}
+	}
+	return out
+}
+
+func TestPageToggles(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, twoPagesConfig, 0o644)
+
+	load := func() *Config {
+		t.Helper()
+		cfg, err := Load(cfgPath)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		return cfg
+	}
+
+	// a hidden page is still parsed, so Settings can list its columns
+	cfg := load()
+	if got := enabledPages(cfg); len(got) != 2 || got[0] != "Accueil" || got[1] != "Media" {
+		t.Errorf("enabled = %v", got)
+	}
+	if sp := cfg.Pages[1]; len(sp.Choices) != 2 || sp.Columns != 2 {
+		t.Errorf("hidden Sports = %d columns, choices %+v", sp.Columns, sp.Choices)
+	}
+
+	if err := SaveLayout(LayoutPath(cfgPath), Layout{
+		Pages:   []string{"Sports"},
+		Columns: map[string][]string{"Sports": {"Scores"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg = load()
+	if got := enabledPages(cfg); len(got) != 1 || got[0] != "Sports" {
+		t.Errorf("enabled = %v", got)
+	}
+	if sp := cfg.Pages[1]; sp.Columns != 1 || sp.Choices[0].Enabled {
+		t.Errorf("Sports columns = %d, choices %+v", sp.Columns, sp.Choices)
+	}
+
+	// a choice naming no current page falls back to the config's flags
+	if err := SaveLayout(LayoutPath(cfgPath), Layout{Pages: []string{"Gone"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := enabledPages(load()); len(got) != 2 {
+		t.Errorf("fallback enabled = %v", got)
+	}
+}
+
+func TestAllPagesHiddenShowsFirst(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, `
+pages:
+  - { name: A, enabled: false, widgets: [ { type: hackernews } ] }
+  - { name: B, enabled: false, widgets: [ { type: hackernews } ] }
+`, 0o644)
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := enabledPages(cfg); len(got) != 1 || got[0] != "A" {
+		t.Errorf("enabled = %v", got)
+	}
+}
+
+func TestLegacyLayoutFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeFile(t, cfgPath, namedColumnsConfig, 0o644)
+	// the first layout.yaml shape: just page -> columns at top level
+	writeFile(t, LayoutPath(cfgPath), "Accueil:\n    - Niches\n", 0o644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if c := cfg.Pages[0].Choices; !c[0].Enabled || c[1].Enabled || c[2].Enabled {
+		t.Errorf("choices = %+v", c)
 	}
 }

@@ -26,26 +26,35 @@
 
       {{ if .Layout.Pages }}
       <section id="layout" class="settings__card">
-        <h2 class="settings__card-title">Columns</h2>
-        <p class="settings__status">Pick which columns each page shows.</p>
+        <h2 class="settings__card-title">Pages &amp; columns</h2>
+        <p class="settings__status">Pick which pages appear in the title bar, and which columns each one shows.</p>
         {{ if .Layout.Error }}<p class="settings__status settings__status--err">{{ .Layout.Error }}</p>{{ end }}
 
-        {{ range .Layout.Pages }}
-        <form method="post" action="/settings/layout" class="settings__layout" data-max="{{ .Max }}">
-          <input type="hidden" name="page" value="{{ .Name }}">
-          <p class="settings__layout-page">{{ .Name }} <span class="settings__layout-max">— up to {{ .Max }}</span></p>
-          {{ range .Columns }}
-          <label class="settings__check">
-            <input type="checkbox" name="column" value="{{ .Name }}"{{ if .Enabled }} checked{{ end }}>
-            <span>{{ .Name }}</span>
-            {{ if .MissingSecrets }}
-            <span class="settings__check-note">needs {{ range $i, $k := .MissingSecrets }}{{ if $i }}, {{ end }}<code>{{ $k }}</code>{{ end }} — add it under <a href="#secrets">Secrets</a></span>
+        <form method="post" action="/settings/layout" class="settings__layout">
+          {{ range $p := .Layout.Pages }}
+          <div class="settings__pagegroup{{ if not .Enabled }} settings__pagegroup--hidden{{ end }}">
+            <label class="settings__check settings__check--page">
+              <input type="checkbox" name="page" value="{{ .Name }}" data-page{{ if .Enabled }} checked{{ end }}>
+              <span>{{ .Name }}</span>
+            </label>
+            {{ if .Columns }}
+            <div class="settings__cols" data-max="{{ .Max }}">
+              <p class="settings__layout-max">Columns — up to {{ .Max }}</p>
+              {{ range .Columns }}
+              <label class="settings__check">
+                <input type="checkbox" name="cols.{{ $p.Name }}" value="{{ .Name }}"{{ if .Enabled }} checked{{ end }}>
+                <span>{{ .Name }}</span>
+                {{ if .MissingSecrets }}
+                <span class="settings__check-note">needs {{ range $i, $k := .MissingSecrets }}{{ if $i }}, {{ end }}<code>{{ $k }}</code>{{ end }} — add it under <a href="#secrets">Secrets</a></span>
+                {{ end }}
+              </label>
+              {{ end }}
+            </div>
             {{ end }}
-          </label>
+          </div>
           {{ end }}
           <noscript><button class="settings__btn" type="submit">Save</button></noscript>
         </form>
-        {{ end }}
       </section>
       {{ end }}
 
@@ -132,12 +141,12 @@
     </main>
   </div>
   <script>
-    // Gray out the unchecked boxes once a page is at its column limit, keep
-    // the last checked box from being unchecked, and save on every change.
+    // Pages: any number, but the last shown one can't be unchecked.
+    // Columns: per page, unchecked boxes gray out at that page's limit and the
+    // last checked one can't be unchecked. Every change saves the whole form.
     document.querySelectorAll('.settings__layout').forEach(function (form) {
-      var max = +form.dataset.max;
-      var boxes = form.querySelectorAll('input[type=checkbox]');
-      function sync() {
+      var all = form.querySelectorAll('input[type=checkbox]');
+      function guard(boxes, max) {
         var n = 0;
         boxes.forEach(function (b) { if (b.checked) n++; });
         boxes.forEach(function (b) {
@@ -145,13 +154,16 @@
           b.parentElement.classList.toggle('settings__check--off', b.disabled);
         });
       }
-      boxes.forEach(function (b) {
+      guard(form.querySelectorAll('input[data-page]'), Infinity);
+      form.querySelectorAll('.settings__cols').forEach(function (g) {
+        guard(g.querySelectorAll('input[type=checkbox]'), +g.dataset.max);
+      });
+      all.forEach(function (b) {
         b.addEventListener('change', function () {
-          boxes.forEach(function (x) { x.disabled = false; }); // disabled boxes aren't submitted
+          all.forEach(function (x) { x.disabled = false; }); // disabled boxes aren't submitted
           form.submit();
         });
       });
-      sync();
     });
   </script>
 </body>

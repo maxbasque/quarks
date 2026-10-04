@@ -102,7 +102,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			layout.Error = layoutErrors[code]
 		}
 		vm.Layout = layout
-		vm.Sections = append(vm.Sections, sectionVM{ID: "layout", Label: "Columns", Status: layout.StatusLine()})
+		vm.Sections = append(vm.Sections, sectionVM{ID: "layout", Label: "Pages & columns", Status: layout.StatusLine()})
 	}
 	vm.Sections = append(vm.Sections,
 		sectionVM{ID: "spotify", Label: "Spotify", Status: sp.StatusLine()},
@@ -115,15 +115,12 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// layoutVM lists every page that declares named columns, for the checkboxes.
+// layoutVM lists every named page and its columns, for the checkboxes.
 func (s *Server) layoutVM() layoutSettingsVM {
 	var vm layoutSettingsVM
-	for _, pg := range s.meta.Load().Pages {
-		if len(pg.Choices) == 0 {
-			continue
-		}
-		pv := layoutPageVM{Name: pg.Name, Max: pg.MaxColumns}
-		for _, c := range pg.Choices {
+	for _, pg := range s.meta.Load().Layout {
+		pv := layoutPageVM{Name: pg.Name, Enabled: pg.Enabled, Max: pg.MaxColumns}
+		for _, c := range pg.Columns {
 			pv.Columns = append(pv.Columns, layoutColumnVM{Name: c.Name, Enabled: c.Enabled, MissingSecrets: c.MissingSecrets})
 			if c.Enabled {
 				pv.Shown++
@@ -135,13 +132,15 @@ func (s *Server) layoutVM() layoutSettingsVM {
 }
 
 var layoutErrors = map[string]string{
-	"none":     "Keep at least one column.",
-	"too_many": "That's more columns than this page allows.",
-	"unknown":  "That page has no columns to choose from — the config may have changed; reload this page.",
+	"no_pages":   "Keep at least one page.",
+	"no_columns": "Each page needs at least one column.",
+	"too_many":   "That's more columns than this page allows.",
 }
 
-// handleLayoutSet saves which named columns a page shows. The choice goes to
-// layout.yaml, never config.yaml.
+// handleLayoutSet saves which pages, and which named columns of each, are
+// shown. The form always carries the whole choice: `page` once per shown
+// page, `cols.<page>` once per shown column. It goes to layout.yaml, never
+// config.yaml.
 func (s *Server) handleLayoutSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -151,40 +150,47 @@ func (s *Server) handleLayoutSet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	name := r.FormValue("page")
+	shown := map[string]bool{}
+	for _, n := range r.Form["page"] {
+		shown[n] = true
+	}
 
-	var page *Page
-	for i, pg := range s.meta.Load().Pages {
-		if pg.Name == name && len(pg.Choices) > 0 {
-			page = &s.meta.Load().Pages[i]
-			break
+	// config order throughout, not form order; names the config doesn't
+	// have are dropped
+	l := config.Layout{Pages: []string{}, Columns: map[string][]string{}}
+	for _, pg := range s.meta.Load().Layout {
+		if shown[pg.Name] {
+			l.Pages = append(l.Pages, pg.Name)
 		}
-	}
-	if page == nil {
-		http.Redirect(w, r, "/settings?lerr=unknown#layout", http.StatusSeeOther)
-		return
-	}
-
-	want := map[string]bool{}
-	for _, c := range r.Form["column"] {
-		want[c] = true
-	}
-	var cols []string // config order, not form order
-	for _, c := range page.Choices {
-		if want[c.Name] {
-			cols = append(cols, c.Name)
+		if len(pg.Columns) == 0 {
+			continue
 		}
+		want := map[string]bool{}
+		for _, c := range r.Form["cols."+pg.Name] {
+			want[c] = true
+		}
+		var cols []string
+		for _, c := range pg.Columns {
+			if want[c.Name] {
+				cols = append(cols, c.Name)
+			}
+		}
+		switch {
+		case len(cols) == 0:
+			http.Redirect(w, r, "/settings?lerr=no_columns#layout", http.StatusSeeOther)
+			return
+		case len(cols) > pg.MaxColumns:
+			http.Redirect(w, r, "/settings?lerr=too_many#layout", http.StatusSeeOther)
+			return
+		}
+		l.Columns[pg.Name] = cols
 	}
-	switch {
-	case len(cols) == 0:
-		http.Redirect(w, r, "/settings?lerr=none#layout", http.StatusSeeOther)
-		return
-	case len(cols) > page.MaxColumns:
-		http.Redirect(w, r, "/settings?lerr=too_many#layout", http.StatusSeeOther)
+	if len(l.Pages) == 0 {
+		http.Redirect(w, r, "/settings?lerr=no_pages#layout", http.StatusSeeOther)
 		return
 	}
 
-	if err := config.SetPageColumns(s.layoutPath, name, cols); err != nil {
+	if err := config.SaveLayout(s.layoutPath, l); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -441,6 +447,7 @@ type layoutSettingsVM struct {
 
 type layoutPageVM struct {
 	Name    string
+	Enabled bool
 	Max     int
 	Shown   int
 	Columns []layoutColumnVM
@@ -453,11 +460,13 @@ type layoutColumnVM struct {
 }
 
 func (lv layoutSettingsVM) StatusLine() string {
-	if len(lv.Pages) == 1 {
-		p := lv.Pages[0]
-		return fmt.Sprintf("%s: %d of %d", p.Name, p.Shown, p.Max)
+	shown := 0
+	for _, p := range lv.Pages {
+		if p.Enabled {
+			shown++
+		}
 	}
-	return fmt.Sprintf("%d pages", len(lv.Pages))
+	return fmt.Sprintf("%d of %d pages shown", shown, len(lv.Pages))
 }
 
 type sectionVM struct {

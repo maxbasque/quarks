@@ -1,11 +1,11 @@
 # The dashboard can have several top-level pages — tabs in the title bar.
 #
 # A page's `columns:` is either a list of named columns (below) or a plain
-# count, with each widget placing itself via `column: N`. Named columns can be
-# switched on and off from Settings (the gear icon in the header); those
-# choices are saved to layout.yaml beside this file and win over `enabled:`.
-# `max_columns` (default 3) caps how many show at once; `weight` sets
-# relative widths.
+# count, with each widget placing itself via `column: N`. Pages and named
+# columns can be switched on and off from Settings (the gear icon in the
+# header); those choices are saved to layout.yaml beside this file and win
+# over the `enabled:` flags here. `max_columns` (default 3) caps how many
+# columns a page shows at once; `weight` sets relative widths.
 #
 # Nothing enabled here needs a secret. Niches' Reddit tab reads your
 # personalized front page, a private RSS URL from reddit.com/prefs/feeds/ —
@@ -88,39 +88,42 @@ pages:
             limit: 20
 
   - name: Sports
-    columns: 3
-    column_weights: [27, 46, 27]   # relative widths; sum to 100 = percentages
-    widgets:
-      - type: nhl
-        column: 1
-        title: Canadiens
-        team: MTL              # 3-letter team code
-        ttl: 1h
-        limit: 12
+    columns:
+      - name: Canadiens
+        weight: 27
+        widgets:
+          - type: nhl
+            title: Canadiens
+            team: MTL              # 3-letter team code
+            ttl: 1h
+            limit: 12
 
-      - type: group
-        column: 2
-        title: Nouvelles
-        tabs:
-          - { title: Sports, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sports/en-continu] }
-          - { title: Hockey, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sous-theme/hockey] }
-          - { title: r/hockey, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/hockey/.rss] }
-          - { title: r/Habs, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/Habs/.rss] }
+      - name: Nouvelles
+        weight: 46
+        widgets:
+          - type: group
+            title: Nouvelles
+            tabs:
+              - { title: Sports, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sports/en-continu] }
+              - { title: Hockey, type: rss, ttl: 20m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/sous-theme/hockey] }
+              - { title: r/hockey, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/hockey/.rss] }
+              - { title: r/Habs, type: rss, ttl: 1h, limit: 25, feeds: [https://www.reddit.com/r/Habs/.rss] }
 
-      - type: group
-        column: 3
-        title: Classements
-        tabs:
-          - { title: NHL, type: standings, league: nhl, group: division, team: MTL, ttl: 2h }
-          - { title: MLB, type: standings, league: mlb, ttl: 2h }
-          # nhl group: division | conference | league
+      - name: Classements
+        weight: 27
+        widgets:
+          - type: group
+            title: Classements
+            tabs:
+              - { title: NHL, type: standings, league: nhl, group: division, team: MTL, ttl: 2h }
+              - { title: MLB, type: standings, league: mlb, ttl: 2h }
+              # nhl group: division | conference | league
 
-      - type: nhl
-        column: 3
-        title: Autour de la ligue
-        mode: scores          # recent final scores, all teams
-        ttl: 20m
-        limit: 20
+          - type: nhl
+            title: Autour de la ligue
+            mode: scores          # recent final scores, all teams
+            ttl: 20m
+            limit: 20
 
   # A Media page (upcoming albums from your followed Spotify artists) isn't
   # included by default: connect Spotify from Settings, which then shows the

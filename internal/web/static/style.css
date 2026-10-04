@@ -504,9 +504,12 @@ a { color: inherit; }
   color: var(--text);
 }
 
-.settings__layout { margin: 14px 0 0; }
-.settings__layout-page { margin: 0 0 6px; color: var(--text); }
-.settings__layout-max { color: var(--faint); font-size: 13px; }
+.settings__layout { margin: 14px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.settings__pagegroup { border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px 8px; }
+.settings__check--page { font-weight: 600; }
+.settings__cols { padding-left: 22px; }
+.settings__pagegroup--hidden .settings__cols { opacity: .6; }
+.settings__layout-max { color: var(--faint); font-size: 13px; margin: 2px 0; }
 .settings__check { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; padding: 5px 0; cursor: pointer; color: var(--text); }
 .settings__check input { accent-color: var(--accent); cursor: inherit; }
 .settings__check--off { color: var(--faint); cursor: default; }
