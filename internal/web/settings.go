@@ -74,6 +74,7 @@ var secretsErrors = map[string]string{
 	"bad_key":      "Key names must be lowercase letters, numbers, and underscores, starting with a letter.",
 	"reserved_key": "That key is managed by the Spotify section above.",
 	"empty_value":  "Enter a value to save.",
+	"bad_value":    "Values can't contain quotes, backslashes or line breaks.",
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -265,10 +266,10 @@ func (s *Server) handleSpotifyCredentials(w http.ResponseWriter, r *http.Request
 		return
 	}
 	kv := map[string]string{}
-	if v := strings.TrimSpace(r.FormValue("client_id")); v != "" {
+	if v := strings.TrimSpace(r.FormValue("client_id")); v != "" && config.SafeValue(v) {
 		kv["spotify_client_id"] = v
 	}
-	if v := strings.TrimSpace(r.FormValue("client_secret")); v != "" {
+	if v := strings.TrimSpace(r.FormValue("client_secret")); v != "" && config.SafeValue(v) {
 		kv["spotify_client_secret"] = v
 	}
 	if len(kv) > 0 {
@@ -381,6 +382,9 @@ func (s *Server) handleSecretsSet(w http.ResponseWriter, r *http.Request) {
 		return
 	case value == "":
 		http.Redirect(w, r, "/settings?serr=empty_value#secrets", http.StatusSeeOther)
+		return
+	case !config.SafeValue(value):
+		http.Redirect(w, r, "/settings?serr=bad_value#secrets", http.StatusSeeOther)
 		return
 	}
 

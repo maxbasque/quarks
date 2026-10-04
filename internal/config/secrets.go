@@ -21,23 +21,45 @@ var tokenRe = regexp.MustCompile(`\$\{([A-Za-z0-9_.:-]+)\}`)
 // placeholders in the raw config bytes before YAML parsing, so a token works
 // anywhere — key, scalar value, or list element. Quote the token in the config
 // (`"${secret:x}"`); a secret value must not itself contain a double quote.
-// Unresolved tokens become empty and are logged.
+// Unresolved tokens become empty and are logged, as do values that could
+// break out of a quoted scalar (see SafeValue).
 func expandTokens(data []byte, secrets map[string]string) []byte {
 	return tokenRe.ReplaceAllFunc(data, func(m []byte) []byte {
 		name := string(tokenRe.FindSubmatch(m)[1])
 		if key, ok := strings.CutPrefix(name, "secret:"); ok {
 			if v, ok := secrets[key]; ok {
+				if !SafeValue(v) {
+					slog.Warn("config: secret holds a quote, backslash or control character; ignoring it", "key", key)
+					return nil
+				}
 				return []byte(v)
 			}
 			slog.Warn("config: unresolved secret", "key", key)
 			return nil
 		}
 		if v, ok := os.LookupEnv(name); ok {
+			if !SafeValue(v) {
+				slog.Warn("config: environment variable holds a quote, backslash or control character; ignoring it", "name", name)
+				return nil
+			}
 			return []byte(v)
 		}
 		slog.Warn("config: unresolved environment variable", "name", name)
 		return nil
 	})
+}
+
+// SafeValue reports whether v can be pasted into the config text inside a
+// double-quoted scalar without ending it: tokens are expanded before YAML
+// parsing, so a value carrying `"` and a newline could otherwise inject
+// whole widgets into the config.
+func SafeValue(v string) bool {
+	for _, r := range v {
+		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // loadSecrets reads a flat key: value YAML file. A missing file is fine (returns

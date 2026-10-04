@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -107,7 +108,7 @@ func (s *Server) Publish(m Meta) {
 	s.metaGen.Add(1)
 }
 
-func (s *Server) Routes() *http.ServeMux {
+func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", noCacheRevalidate(http.FileServer(http.FS(assets))))
 	mux.HandleFunc("/manifest.webmanifest", s.handleManifest)
@@ -123,7 +124,28 @@ func (s *Server) Routes() *http.ServeMux {
 	mux.HandleFunc("/settings/secrets/set", s.handleSecretsSet)
 	mux.HandleFunc("/settings/secrets/delete", s.handleSecretsDelete)
 	mux.HandleFunc("/", s.handleIndex)
-	return mux
+	// The server has no auth — it's only safe because nothing but the user's
+	// own browser should reach it. Any web page the user visits can still aim
+	// requests at 127.0.0.1, so: refuse cross-site POSTs (a hidden form
+	// rewriting secrets.yaml), and refuse Host names other than localhost or
+	// an IP literal (DNS rebinding — evil.example resolving to 127.0.0.1 so
+	// its scripts can read the dashboard, or use /reader to fetch LAN pages).
+	return checkHost(http.NewCrossOriginProtection().Handler(mux))
+}
+
+func checkHost(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+		if host != "localhost" && net.ParseIP(host) == nil {
+			http.Error(w, "unrecognized host", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleOpen hands a URL to the OS default browser. The app-window (Chromium in

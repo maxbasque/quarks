@@ -373,3 +373,48 @@ func TestLayoutSet(t *testing.T) {
 		}
 	}
 }
+
+func TestRejectsCrossSitePost(t *testing.T) {
+	s := testServer(t, nil)
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:7373/settings/secrets/set",
+		strings.NewReader(url.Values{"key": {"reddit_home"}, "value": {"https://evil.example/rss"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := httptest.NewRecorder()
+	s.Routes().ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+	if keys, _ := config.ListSecretKeys(s.secretsPath); len(keys) != 0 {
+		t.Errorf("secret written anyway: %v", keys)
+	}
+}
+
+func TestRejectsUnknownHost(t *testing.T) {
+	s := testServer(t, nil)
+	for host, want := range map[string]int{
+		"evil.example:7373": http.StatusForbidden, // DNS rebinding
+		"localhost:7373":    http.StatusOK,
+		"127.0.0.1:7373":    http.StatusOK,
+		"[::1]:7373":        http.StatusOK,
+		"192.168.1.20:7373": http.StatusOK, // --addr on the LAN, reached by IP
+	} {
+		req := httptest.NewRequest(http.MethodGet, "http://"+host+"/settings", nil)
+		w := httptest.NewRecorder()
+		s.Routes().ServeHTTP(w, req)
+		if w.Code != want {
+			t.Errorf("Host %s: status = %d, want %d", host, w.Code, want)
+		}
+	}
+}
+
+func TestSecretsSetRejectsYAMLBreakout(t *testing.T) {
+	s := testServer(t, nil)
+	w := postForm(t, s, "/settings/secrets/set", url.Values{"key": {"reddit_home"}, "value": {"x\"]\n  - type: rss"}})
+	if loc := w.Header().Get("Location"); loc != "/settings?serr=bad_value#secrets" {
+		t.Errorf("Location = %q", loc)
+	}
+	if keys, _ := config.ListSecretKeys(s.secretsPath); len(keys) != 0 {
+		t.Errorf("secret written anyway: %v", keys)
+	}
+}

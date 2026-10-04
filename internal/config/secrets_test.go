@@ -197,3 +197,13 @@ func TestDeleteSecretMissingFileIsNoop(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExpandTokensRefusesBreakout(t *testing.T) {
+	got := expandTokens([]byte(`feeds: [ "${secret:a}", "${secret:b}" ]`), map[string]string{
+		"a": "https://ok.example/rss?x=1&y=2",
+		"b": "x\" ]\nwidgets: [",
+	})
+	if want := `feeds: [ "https://ok.example/rss?x=1&y=2", "" ]`; string(got) != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
