@@ -50,8 +50,15 @@ document.addEventListener("click", function (e) {
 }, true);
 `
 
+// errQuit is the user choosing Quitter in the broken-config dialog.
+var errQuit = errors.New("quit")
+
 func main() {
-	if err := run(); err != nil {
+	err := run()
+	if errors.Is(err, errQuit) {
+		return
+	}
+	if err != nil {
 		alert("Quark's n’a pas pu démarrer.\n\n" + err.Error())
 		os.Exit(1)
 	}
@@ -86,13 +93,43 @@ func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	headless := os.Getenv("QUARKS_HEADLESS") != "" // CI: no window, no dialogs
+
+	// A config that won't load — usually one left by an older version — gets
+	// a choice instead of a dead end: start over from the default config
+	// (the old file is kept beside it) or quit.
+	for {
+		err := a.Start(ctx)
+		if err == nil {
+			break
+		}
+		if headless || !errors.Is(err, app.ErrInitialConfig) {
+			ln.Close()
+			return err
+		}
+		if !askReset(err) {
+			ln.Close()
+			return errQuit
+		}
+		backup := cfgPath + ".ancien-" + time.Now().Format("2006-01-02-150405")
+		if err := os.Rename(cfgPath, backup); err != nil {
+			ln.Close()
+			return err
+		}
+		log.Info("config reset", "backup", backup)
+		if err := seedConfig(cfgPath); err != nil {
+			ln.Close()
+			return err
+		}
+	}
+
 	served := make(chan error, 1)
 	go func() { served <- a.Serve(ctx, ln) }()
 
 	url := "http://127.0.0.1:" + strconv.Itoa(ln.Addr().(*net.TCPAddr).Port) + "/"
 
 	// For CI: serve without a window until SIGTERM.
-	if os.Getenv("QUARKS_HEADLESS") != "" {
+	if headless {
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 		select {
@@ -178,10 +215,27 @@ func logWriter(home string) io.Writer {
 	return f
 }
 
+// askReset explains a config error and asks whether to start over from the
+// default config. True means Réinitialiser.
+func askReset(cause error) bool {
+	msg := "La configuration de Quark's contient une erreur :\n\n" + cause.Error() +
+		"\n\nRéinitialiser remet la configuration par défaut. L’ancienne est gardée à côté, " +
+		"dans Application Support › quarks."
+	out, err := exec.Command("/usr/bin/osascript", "-e",
+		`display dialog "`+osaQuote(msg)+`" with title "Quark's" buttons {"Quitter", "Réinitialiser"} `+
+			`default button "Réinitialiser" cancel button "Quitter" with icon caution`).Output()
+	return err == nil && strings.Contains(string(out), "Réinitialiser")
+}
+
+func osaQuote(s string) string { return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) }
+
 // alert shows a plain dialog. It goes through osascript so it works even
 // when the error came before (or instead of) the window.
 func alert(msg string) {
-	esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(msg)
+	if os.Getenv("QUARKS_HEADLESS") != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		return
+	}
 	_ = exec.Command("/usr/bin/osascript", "-e",
-		`display dialog "`+esc+`" with title "Quark's" buttons {"OK"} default button 1 with icon caution`).Run()
+		`display dialog "`+osaQuote(msg)+`" with title "Quark's" buttons {"OK"} default button 1 with icon caution`).Run()
 }

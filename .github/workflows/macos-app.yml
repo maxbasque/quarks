@@ -46,6 +46,19 @@ jobs:
           test -f "$HOME/Library/Application Support/quarks/config.yaml"
           kill "$pid"; wait "$pid" || true
 
+      - name: Smoke test — a broken config fails cleanly
+        run: |
+          home=$(mktemp -d)
+          mkdir -p "$home/Library/Application Support/quarks"
+          printf 'pages:\n  - name: Home\n    widgets:\n      - { type: ebird, title: Birds }\n' > "$home/Library/Application Support/quarks/config.yaml"
+          set +e
+          HOME="$home" QUARKS_HEADLESS=1 perl -e 'alarm 20; exec @ARGV' "dist/Quark's.app/Contents/MacOS/Quarks" 2> err.txt
+          code=$?
+          set -e
+          cat err.txt
+          test "$code" = 1                                  # exited, didn't hang (the alarm gives 142)
+          grep -q 'unknown widget type "ebird"' err.txt
+
       - name: Smoke test — the real app, opened through Finder
         run: |
           open "dist/Quark's.app"

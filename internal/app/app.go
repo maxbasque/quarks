@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -97,44 +98,43 @@ func (a *App) Refresh(key string) bool {
 	return rt.sched.Refresh(key)
 }
 
+// ErrInitialConfig marks a Start that failed because the config couldn't be
+// loaded — a YAML error, or a widget this version doesn't know.
+var ErrInitialConfig = errors.New("initial config")
+
 // Run loads the config, starts the HTTP server and the config watcher, and
 // blocks until ctx is cancelled.
 func (a *App) Run(ctx context.Context, addr string) error {
-	if err := a.start(ctx); err != nil {
+	if err := a.Start(ctx); err != nil {
 		return err
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	return a.serve(ctx, ln)
+	return a.Serve(ctx, ln)
 }
 
-// Serve is Run on a listener the caller already opened — the macOS app
-// claims its port before it shows the window. It closes ln.
-func (a *App) Serve(ctx context.Context, ln net.Listener) error {
-	if err := a.start(ctx); err != nil {
-		ln.Close()
-		return err
-	}
-	return a.serve(ctx, ln)
-}
-
-// start loads the config and starts the scheduler and the config watcher.
-func (a *App) start(ctx context.Context) error {
+// Start loads the config and starts the scheduler and the config watcher.
+// Run does this itself; the macOS app calls it separately so it can offer
+// to reset a broken config before it opens a window. A failed Start can be
+// retried.
+func (a *App) Start(ctx context.Context) error {
 	a.mu.Lock()
 	a.runCtx = ctx
 	a.mu.Unlock()
 
 	if err := a.reload(ctx); err != nil {
-		return fmt.Errorf("initial config: %w", err)
+		return fmt.Errorf("%w: %w", ErrInitialConfig, err)
 	}
 	a.setLastMod(a.watchStamp())
 	go a.watch(ctx)
 	return nil
 }
 
-func (a *App) serve(ctx context.Context, ln net.Listener) error {
+// Serve serves the dashboard on ln, which the caller already opened, until
+// ctx is cancelled. Call Start first.
+func (a *App) Serve(ctx context.Context, ln net.Listener) error {
 	httpSrv := &http.Server{Handler: a.srv.Routes()}
 	go func() {
 		<-ctx.Done()
