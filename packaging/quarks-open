@@ -16,7 +16,12 @@ if [ "$(uname)" = "Darwin" ]; then
   exit 1
 fi
 
-# Linux: Flatpak first, then native binaries.
+# Linux: the native window when it's installed (make window), else a
+# Chromium-family browser — Flatpak first, then native binaries.
+if command -v quarks-window >/dev/null 2>&1; then
+  exec quarks-window --url "$url"
+fi
+
 for app in com.google.Chrome org.chromium.Chromium com.brave.Browser com.microsoft.Edge io.github.ungoogled_software.ungoogled_chromium; do
   if flatpak info "$app" >/dev/null 2>&1; then
     exec flatpak run "$app" --app="$url"

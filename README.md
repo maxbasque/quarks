@@ -78,6 +78,13 @@ service (starts at login; `loginctl enable-linger $USER` to keep it running whil
 logged out), and a `.desktop` launcher with icons. Launch the window from your app
 menu ("Quark's") or `quarks-open`.
 
+**Linux native window (optional)** — `make window` builds `quarks-window`, a
+WebKitGTK window on the running service, and installs it to `~/.local/bin`;
+`quarks-open` (and so the app-menu launcher) then uses it instead of a
+Chromium-family browser. It needs the WebKitGTK headers, so it's built in a
+toolbox — the one-time setup is in the Makefile. Remove
+`~/.local/bin/quarks-window` to go back to the Chromium window.
+
 **macOS, for everyone else** — download `Quarks-<version>.dmg` from the
 GitHub releases page and drag Quark's onto Applications (step-by-step French
 guide: [`packaging/macos/INSTALLER.md`](packaging/macos/INSTALLER.md)). It's a

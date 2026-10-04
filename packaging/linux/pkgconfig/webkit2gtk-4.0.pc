@@ -1,0 +1,7 @@
+# webview_go asks pkg-config for webkit2gtk-4.0, which current distributions
+# no longer ship. 4.1 is the same API built against libsoup 3, so this shim
+# just points the old name at it. Used by `make window`.
+Name: webkit2gtk-4.0
+Description: Alias for webkit2gtk-4.1
+Version: 2.40.0
+Requires: webkit2gtk-4.1
