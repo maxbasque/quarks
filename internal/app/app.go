@@ -16,6 +16,7 @@ import (
 
 	"github.com/maxbasque/quarks/internal/config"
 	"github.com/maxbasque/quarks/internal/core"
+	"github.com/maxbasque/quarks/internal/providers/f1"
 	"github.com/maxbasque/quarks/internal/providers/hackernews"
 	"github.com/maxbasque/quarks/internal/providers/nhl"
 	"github.com/maxbasque/quarks/internal/providers/onthisday"
@@ -71,6 +72,7 @@ func New(cfgPath, cacheDir string, log *slog.Logger) (*App, error) {
 	reg.Register("onthisday", onthisday.New)
 	reg.Register("potd", potd.New)
 	reg.Register("spotify", spotify.New)
+	reg.Register("f1", f1.New)
 
 	a := &App{cfgPath: cfgPath, log: log, registry: reg, store: store}
 
@@ -266,7 +268,7 @@ func (a *App) reload(ctx context.Context) error {
 	}
 
 	a.srv.Publish(web.Meta{
-		Theme: cfg.Window.Theme,
+		Theme:  cfg.Window.Theme,
 		TTLs:   ttls,
 		Pages:  pages,
 		Layout: layout,

@@ -87,7 +87,7 @@ pages:
             ttl: 20m
             limit: 20
 
-  - name: Sports
+  - name: Hockey
     columns:
       - name: Canadiens
         weight: 27
@@ -124,6 +124,43 @@ pages:
             mode: scores          # recent final scores, all teams
             ttl: 20m
             limit: 20
+
+  - name: F1
+    columns:
+      - name: Calendrier
+        weight: 27
+        widgets:
+          # race calendar, then results — times in this computer's time zone
+          - type: f1
+            title: Calendrier
+            mode: schedule
+            ttl: 6h
+
+      - name: Nouvelles
+        weight: 46
+        widgets:
+          - type: group
+            title: Nouvelles
+            tabs:
+              - { title: The Race, type: rss, ttl: 20m, limit: 30, source: The Race, feeds: [https://www.the-race.com/category/formula-1/feed/] }
+              - { title: Autosport, type: rss, ttl: 20m, limit: 30, source: Autosport, feeds: [https://www.autosport.com/rss/f1/news/] }
+              # RDS doesn't advertise it, but its publishing platform serves a feed per
+              # section; it only holds the last couple of days (often 3–5 stories)
+              - { title: RDS, type: rss, ttl: 30m, limit: 20, source: RDS, feeds: [https://www.rds.ca/arc/outboundfeeds/rss/category/courses/formule-1/] }
+
+      - name: Classements
+        weight: 27
+        widgets:
+          # highlight: a driver code / surname or a team name, e.g. STR or Aston Martin
+          - type: f1
+            title: Pilotes
+            mode: drivers
+            ttl: 1h
+
+          - type: f1
+            title: Constructeurs
+            mode: constructors
+            ttl: 1h
 
   # A Media page (upcoming albums from your followed Spotify artists) isn't
   # included by default: connect Spotify from Settings, which then shows the

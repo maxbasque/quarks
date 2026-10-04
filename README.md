@@ -34,7 +34,8 @@ Flags: `--config <path>` (default `~/.config/quarks/config.yaml`, or
 
 **Widget types:** `rss` (also covers YouTube channel feeds and the Reddit home
 feed via a secret URL), `hackernews`, `youtube` (channels + playlists), `reddit`,
-`weather`, `nhl` (a team's schedule), `standings`, `onthisday`, `potd`,
+`weather`, `nhl` (a team's schedule), `standings`, `f1` (race calendar, or
+driver / constructor standings, via the keyless Jolpica API), `onthisday`, `potd`,
 `spotify` (upcoming releases from your followed artists — see Settings below).
 `type: group` bundles several widgets into one card with tabs. Secrets live in
 `secrets.yaml` next to the config (`chmod 600`), referenced as `${secret:key}`
