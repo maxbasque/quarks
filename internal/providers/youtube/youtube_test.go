@@ -67,8 +67,9 @@ func TestChannelsBecomeFeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
-	if len(got.Items) != 2 { // one from the channel feed, one from the playlist feed
-		t.Fatalf("want 2 items, got %d", len(got.Items))
+	// both feeds serve the same video; it's listed once
+	if len(got.Items) != 1 {
+		t.Fatalf("want 1 item, got %d", len(got.Items))
 	}
 	if gotChannel != "UCtestchannelid000000" || gotPlaylist != "PLtestplaylist00000" {
 		t.Errorf("requested channel=%q playlist=%q", gotChannel, gotPlaylist)

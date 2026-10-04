@@ -123,7 +123,23 @@ func (p *Provider) Fetch(ctx context.Context) (core.Payload, error) {
 		}
 		sortByDate(items)
 	}
-	return core.Feed(items), nil
+	return core.Feed(dedupe(items)), nil
+}
+
+// dedupe drops repeats of an item already listed — a story filed under two
+// sections shows up in both sections' feeds (La Presse's manchettes and
+// actualités do this), with the same GUID but different tracking params.
+func dedupe(items []core.Item) []core.Item {
+	seen := make(map[string]bool, len(items))
+	out := items[:0]
+	for _, it := range items {
+		if it.ID != "" && seen[it.ID] {
+			continue
+		}
+		seen[it.ID] = true
+		out = append(out, it)
+	}
+	return out
 }
 
 // feedItems fetches and parses one feed, using an ETag / Last-Modified

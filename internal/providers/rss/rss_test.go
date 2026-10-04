@@ -261,3 +261,23 @@ func titles(items []core.Item) []string {
 	}
 	return out
 }
+
+func TestMergedFeedsDropDuplicates(t *testing.T) {
+	// the same story (same GUID) filed in both sections' feeds
+	mux := http.NewServeMux()
+	mux.HandleFunc("/a.xml", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<rss version="2.0"><channel><title>A</title>`+
+			item("shared", "2026-09-08T12:00:00Z")+item("a1", "2026-09-08T11:00:00Z")+`</channel></rss>`)
+	})
+	mux.HandleFunc("/b.xml", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<rss version="2.0"><channel><title>B</title>`+
+			item("shared", "2026-09-08T12:00:00Z")+item("b1", "2026-09-08T10:00:00Z")+`</channel></rss>`)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	items := fetch(t, fmt.Sprintf("type: rss\ntitle: Mix\nfeeds: [%s/a.xml, %s/b.xml]\n", srv.URL, srv.URL))
+	if got := titles(items); len(got) != 3 || got[0] != "shared" || got[1] != "a1" || got[2] != "b1" {
+		t.Errorf("titles = %v; want [shared a1 b1]", got)
+	}
+}

@@ -39,6 +39,10 @@ pages:
               - { title: En continu, type: rss, ttl: 10m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/info/en-continu] }
               - { title: Montréal, type: rss, ttl: 15m, limit: 30, feeds: [https://ici.radio-canada.ca/info/rss/grandmontreal/en-continu] }
               - { title: Noovo, type: rss, ttl: 20m, limit: 25, source: Noovo Info, feeds: [https://www.noovo.info/arc/outboundfeeds/rss/] }
+              # Front-page + news feeds merged (repeats dropped). The RSS listing
+              # doesn't count toward La Presse's weekly article limit.
+              - { title: La Presse, type: rss, ttl: 15m, limit: 25, source: La Presse,
+                  feeds: [https://www.lapresse.ca/manchettes/rss, https://www.lapresse.ca/actualites/rss] }
               # RC section feeds: …/info/rss/<section>/en-continu
               #   (politique, international, economie, sante, grandmontreal, sports, …)
 
